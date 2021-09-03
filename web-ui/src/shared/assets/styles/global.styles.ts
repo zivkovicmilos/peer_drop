@@ -49,6 +49,24 @@ export const globalStyles = {
       height: 'auto',
       marginRight: '12px',
       imageRendering: '-webkit-optimize-contrast'
+    },
+    '.actionButtonRounded': {
+      fontFamily: 'Montserrat',
+      padding: '8px 16px',
+      borderRadius: '20px'
+    },
+    '.MuiDataGrid-columnHeaderTitleContainer': {
+      justifyContent: 'center'
+    },
+    '.MuiDataGrid-columnHeaderTitle': {
+      fontWeight: '700 !important'
+    },
+    '.muiGridTableCell': {
+      fontWeight: 500,
+      outline: 'none !important'
+    },
+    '.MuiIconButton-root': {
+      padding: '3px'
     }
   }
 };

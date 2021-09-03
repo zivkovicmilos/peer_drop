@@ -57,11 +57,8 @@ const MenuActionButton: FC<IMenuActionButtonProps> = () => {
           New Workspace
         </Button>
         <Button
-          color="primary"
-          size="small"
-          aria-controls={open ? 'split-button-menu' : undefined}
-          aria-expanded={open ? 'true' : undefined}
-          aria-haspopup="menu"
+          color={'primary'}
+          size={'small'}
           onClick={handleToggle}
           className={classes.rounded}
         >

@@ -81,7 +81,7 @@ const AppLayout: FC<IAppLayoutProps> = (props) => {
         className={classes.mainSection}
       >
         <Container maxWidth={'lg'} fixed={true}>
-          <Box display={'flex'} width={'100%'} alignItems={'center'}>
+          <Box display={'flex'} width={'100%'} alignItems={'center'} mb={6}>
             <Searchbar />
             <UserMenu />
           </Box>

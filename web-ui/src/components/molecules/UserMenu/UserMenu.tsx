@@ -69,7 +69,6 @@ const UserMenu: FC<IUserMenuProps> = () => {
         anchorEl={anchorRef.current}
         role={undefined}
         transition
-        disablePortal
       >
         {({ TransitionProps, placement }) => (
           <Grow
