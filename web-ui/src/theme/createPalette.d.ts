@@ -18,7 +18,7 @@ interface CustomThemeColors {
   lightGray: string;
   white: string;
   darkGray: string;
-  menuInactive: string;
+  transparentBlack: string;
 }
 
 interface CustomBoxShadows {

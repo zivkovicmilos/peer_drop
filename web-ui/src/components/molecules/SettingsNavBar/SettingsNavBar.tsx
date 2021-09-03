@@ -40,7 +40,7 @@ const SettingsNavBar: FC<ISettingsNavBarProps> = (props) => {
             style={{
               fill: isActive
                 ? theme.palette.primary.main
-                : theme.palette.custom.menuInactive
+                : theme.palette.custom.transparentBlack
             }}
           />
           <Typography
@@ -88,7 +88,7 @@ const useStyles = makeStyles(() => {
       fontFamily: 'Montserrat'
     },
     menuItemTextInactive: {
-      color: theme.palette.custom.menuInactive
+      color: theme.palette.custom.transparentBlack
     }
   };
 });

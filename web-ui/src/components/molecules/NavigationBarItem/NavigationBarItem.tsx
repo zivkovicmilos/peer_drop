@@ -26,7 +26,7 @@ const NavigationBarItem: FC<INavigationBarItemProps> = (props) => {
             style={{
               fill: isActive
                 ? theme.palette.primary.main
-                : theme.palette.custom.menuInactive
+                : theme.palette.custom.transparentBlack
             }}
           />
         );
@@ -37,7 +37,7 @@ const NavigationBarItem: FC<INavigationBarItemProps> = (props) => {
             style={{
               fill: isActive
                 ? theme.palette.primary.main
-                : theme.palette.custom.menuInactive
+                : theme.palette.custom.transparentBlack
             }}
           />
         );
@@ -48,7 +48,7 @@ const NavigationBarItem: FC<INavigationBarItemProps> = (props) => {
             style={{
               fill: isActive
                 ? theme.palette.primary.main
-                : theme.palette.custom.menuInactive
+                : theme.palette.custom.transparentBlack
             }}
           />
         );
@@ -136,7 +136,7 @@ const useStyles = makeStyles((theme: Theme) => {
       fontFamily: 'Montserrat'
     },
     menuItemTextInactive: {
-      color: theme.palette.custom.menuInactive
+      color: theme.palette.custom.transparentBlack
     }
   };
 });

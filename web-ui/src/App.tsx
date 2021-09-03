@@ -6,17 +6,28 @@ import { BrowserRouter as Router } from 'react-router-dom';
 import './App.css';
 import { SnackbarProvider } from './components/molecules/Snackbar/snackbar.context';
 import SessionContext, { ISessionContext } from './context/SessionContext';
-import { IUserIdentity } from './context/sessionContext.types';
+import { ESearchContext, IUserIdentity } from './context/sessionContext.types';
 import AppRouter from './router/AppRouter';
 import { globalStyles } from './shared/assets/styles/global.styles';
 import ThemeProvider from './theme/ThemeProvider';
 
 function App() {
-  const [userIdentity, setUserIdentity] = useState<IUserIdentity | null>(null);
+  const [userIdentity, setUserIdentity] = useState<IUserIdentity | null>({
+    name: 'Milos',
+    keyID: '123456',
+    picture: 'https://static.dw.com/image/58133780_6.jpg'
+  });
+  const [searchContext, setSearchContext] = useState<ESearchContext>(
+    ESearchContext.WORKSPACES
+  );
+
+  // TODO load user identity from disk
 
   const sessionContextValue: ISessionContext = {
     userIdentity,
-    setUserIdentity
+    searchContext,
+    setUserIdentity,
+    setSearchContext
   };
 
   return (

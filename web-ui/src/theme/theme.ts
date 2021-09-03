@@ -24,7 +24,7 @@ const theme: Theme = createMuiTheme({
       lightGray: '#EFF2F5',
       white: '#FFFFFF',
       darkGray: '#F4F4F4',
-      menuInactive: 'rgba(0, 0, 0, 0.5)'
+      transparentBlack: 'rgba(0, 0, 0, 0.5)'
     },
     boxShadows: {
       main: '1px 3px 6px 0px rgba(128,142,155,0.1)',
@@ -32,7 +32,7 @@ const theme: Theme = createMuiTheme({
     }
   },
   typography: {
-    fontFamily: `"Merriweather", sans-serif`,
+    fontFamily: `"Montserrat", sans-serif`,
     h1: {
       fontSize: '2.25rem'
     },

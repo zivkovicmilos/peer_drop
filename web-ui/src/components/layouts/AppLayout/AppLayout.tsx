@@ -1,7 +1,15 @@
-import { Box, Drawer, SwipeableDrawer, useMediaQuery } from '@material-ui/core';
+import {
+  Box,
+  Container,
+  Drawer,
+  SwipeableDrawer,
+  useMediaQuery
+} from '@material-ui/core';
 import { makeStyles, Theme } from '@material-ui/core/styles';
 import { FC, useState } from 'react';
 import theme from '../../../theme/theme';
+import Searchbar from '../../molecules/Searchbar/Searchbar';
+import UserMenu from '../../molecules/UserMenu/UserMenu';
 import NavigationBar from '../../organisms/NavigationBar/NavigationBar';
 import { IAppLayoutProps } from './appLayout.types';
 
@@ -70,9 +78,15 @@ const AppLayout: FC<IAppLayoutProps> = (props) => {
         px={{ xs: 0, md: 8 }}
         width={'100%'}
         overflow={'auto'}
-        className={classes.shadowWrapper}
+        className={classes.mainSection}
       >
-        {props.children}
+        <Container maxWidth={'lg'} fixed={true}>
+          <Box display={'flex'} width={'100%'} alignItems={'center'}>
+            <Searchbar />
+            <UserMenu />
+          </Box>
+          {props.children}
+        </Container>
       </Box>
     </Box>
   );
@@ -82,7 +96,9 @@ const drawerWidth = 300;
 
 const useStyles = makeStyles((theme: Theme) => {
   return {
-    shadowWrapper: {
+    mainSection: {
+      display: 'flex',
+      flexDirection: 'column',
       background: theme.palette.custom.white
     },
     drawer: {

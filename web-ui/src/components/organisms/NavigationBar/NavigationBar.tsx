@@ -135,7 +135,7 @@ const useStyles = makeStyles(() => {
       fontFamily: 'Montserrat'
     },
     menuItemTextInactive: {
-      color: theme.palette.custom.menuInactive
+      color: theme.palette.custom.transparentBlack
     }
   };
 });

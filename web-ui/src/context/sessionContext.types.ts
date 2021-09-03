@@ -3,3 +3,9 @@ export interface IUserIdentity {
   keyID: string;
   picture: string;
 }
+
+export enum ESearchContext {
+  WORKSPACES = 'workspaces',
+  CONTACTS = 'contacts',
+  IDENTITIES = 'identities'
+}
