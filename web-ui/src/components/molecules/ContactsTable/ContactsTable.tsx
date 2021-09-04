@@ -1,5 +1,4 @@
 import { Box, IconButton } from '@material-ui/core';
-import { makeStyles } from '@material-ui/core/styles';
 import { DataGrid, GridCellParams, GridColDef } from '@material-ui/data-grid';
 import DeleteRoundedIcon from '@material-ui/icons/DeleteRounded';
 import EditRoundedIcon from '@material-ui/icons/EditRounded';
@@ -169,9 +168,5 @@ const ContactsTable: FC<IContactsTableProps> = () => {
     return <LoadingIndicator style={{ color: theme.palette.primary.main }} />;
   }
 };
-
-const useStyles = makeStyles(() => {
-  return {};
-});
 
 export default ContactsTable;
