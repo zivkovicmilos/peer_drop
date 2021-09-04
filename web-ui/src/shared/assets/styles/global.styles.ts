@@ -67,6 +67,9 @@ export const globalStyles = {
     },
     '.MuiIconButton-root': {
       padding: '3px'
+    },
+    textarea: {
+      fontSize: '0.875rem !important'
     }
   }
 };

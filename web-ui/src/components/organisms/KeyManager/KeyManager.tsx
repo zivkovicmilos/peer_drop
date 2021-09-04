@@ -21,6 +21,8 @@ const KeyManager: FC<IKeyManagerProps> = (props) => {
   );
   const classes = useStyles();
 
+  const { addedKeys, setAddedKeys } = props;
+
   const dropzoneStyle = {
     display: 'flex',
     flexDirection: 'column',
@@ -58,10 +60,6 @@ const KeyManager: FC<IKeyManagerProps> = (props) => {
   };
 
   const { visibleTypes } = props;
-
-  const [addedKeys, setAddedKeys] = useState<{ keys: string[] }>({
-    keys: []
-  });
 
   const handleKeyRemove = (key: string) => {
     const index = addedKeys.keys.indexOf(key);
@@ -198,11 +196,14 @@ const useStyles = makeStyles(() => {
       cursor: 'pointer',
       width: '50%'
     },
+    inputRoot: {
+      fontSize: '0.5rem'
+    },
     textInputWrapper: {
       borderRadius: '15px',
       height: '200px',
       width: '50%',
-      fontSize: '0.875rem'
+      fontSize: '0.875rem !important'
     }
   };
 });

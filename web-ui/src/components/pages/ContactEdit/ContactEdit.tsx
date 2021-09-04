@@ -1,19 +1,74 @@
-import { Box, IconButton, TextField } from '@material-ui/core';
-import { makeStyles } from '@material-ui/core/styles';
+import { Box, IconButton, TextField, Typography } from '@material-ui/core';
 import ArrowBackRoundedIcon from '@material-ui/icons/ArrowBackRounded';
-import { FC } from 'react';
+import SaveRoundedIcon from '@material-ui/icons/SaveRounded';
+import { useFormik } from 'formik';
+import { FC, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import newContactValidationSchema from '../../../shared/schemas/contactSchemas';
+import theme from '../../../theme/theme';
+import ActionButton from '../../atoms/ActionButton/ActionButton';
 import FormTitle from '../../atoms/FormTitle/FormTitle';
 import Link from '../../atoms/Link/Link';
 import PageTitle from '../../atoms/PageTitle/PageTitle';
+import useSnackbar from '../../molecules/Snackbar/useSnackbar.hook';
 import KeyManager from '../../organisms/KeyManager/KeyManager';
-import { EKeyInputType } from '../../organisms/KeyManager/keyManager.types';
-import { IContactEditParams, IContactEditProps } from './contactEdit.types';
+import {
+  EKeyInputType,
+  IKeysWrapper
+} from '../../organisms/KeyManager/keyManager.types';
+import {
+  EContactEditType,
+  IContactEditParams,
+  IContactEditProps,
+  IKeyPair
+} from './contactEdit.types';
 
 const ContactEdit: FC<IContactEditProps> = (props) => {
   const { type } = props;
 
+  const pageTitle =
+    type === EContactEditType.NEW ? 'New Contact' : 'Edit Contact';
+
+  const [errorMessage, setErrorMessage] = useState<string>();
+  const [addedKeys, setAddedKeys] = useState<IKeysWrapper>({ keys: [] });
+  const [initialValues, setInitialValues] = useState<{
+    name: string;
+    keyPairs: IKeyPair[];
+  }>({
+    name: '',
+    keyPairs: []
+  });
+
   const { contactId } = useParams() as IContactEditParams;
+  const { openSnackbar } = useSnackbar();
+
+  const formik = useFormik({
+    initialValues,
+    enableReinitialize: true,
+    validationSchema: newContactValidationSchema,
+    onSubmit: (values, { resetForm }) => {
+      setErrorMessage('');
+
+      if (values.keyPairs.length < 1) {
+        setErrorMessage('At least 1 public key is required');
+        return;
+      }
+    }
+  });
+
+  useEffect(() => {
+    if (type === EContactEditType.EDIT) {
+      // Fetch contact information based on the passed in ID
+      // TODO change mock
+
+      setInitialValues({
+        name: 'Milos Zivkovic',
+        keyPairs: [{ publicKey: '123', privateKey: '123' }]
+      });
+
+      setAddedKeys({ keys: ['123'] });
+    }
+  }, []);
 
   return (
     <Box display={'flex'} flexDirection={'column'}>
@@ -31,11 +86,11 @@ const ContactEdit: FC<IContactEditProps> = (props) => {
           </IconButton>
         </Link>
         <Box>
-          <PageTitle title={'New Contact'} />
+          <PageTitle title={pageTitle} />
         </Box>
       </Box>
-      <Box width={'100%'}>
-        <form autoComplete={'off'}>
+      <Box width={'100%'} display={'flex'} flexDirection={'column'}>
+        <form autoComplete={'off'} onSubmit={formik.handleSubmit}>
           <Box
             display={'flex'}
             flexDirection={'column'}
@@ -45,18 +100,44 @@ const ContactEdit: FC<IContactEditProps> = (props) => {
             <Box mb={2}>
               <FormTitle title={'Basic info'} />
             </Box>
-            <TextField id={'name'} label={'Name'} variant={'outlined'} />
+            <TextField
+              id={'name'}
+              label={'Name'}
+              variant={'outlined'}
+              value={formik.values.name}
+              onChange={formik.handleChange}
+              onBlur={formik.handleBlur}
+              error={formik.touched.name && Boolean(formik.errors.name)}
+              helperText={formik.touched.name && formik.errors.name}
+            />
           </Box>
-          <Box
-            display={'flex'}
-            flexDirection={'column'}
-            mt={2}
-          >
+          <Box display={'flex'} flexDirection={'column'} mt={2}>
             <Box mb={2}>
               <FormTitle title={'Public keys'} />
             </Box>
             <KeyManager
+              addedKeys={addedKeys}
+              setAddedKeys={setAddedKeys}
               visibleTypes={[EKeyInputType.IMPORT, EKeyInputType.ENTER]}
+            />
+          </Box>
+          <Box display={errorMessage ? 'flex' : 'none'}>
+            <Typography
+              variant={'body1'}
+              style={{
+                marginTop: '1rem',
+                fontFamily: 'Montserrat',
+                color: theme.palette.error.main
+              }}
+            >
+              {errorMessage}
+            </Typography>
+          </Box>
+          <Box mt={5} display={'flex'}>
+            <ActionButton
+              text={'Save'}
+              square
+              startIcon={<SaveRoundedIcon />}
             />
           </Box>
         </form>

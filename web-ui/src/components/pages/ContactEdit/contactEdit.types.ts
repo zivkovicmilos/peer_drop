@@ -10,3 +10,8 @@ export enum EContactEditType {
 export interface IContactEditParams {
   contactId: string | null;
 }
+
+export interface IKeyPair {
+  publicKey: string;
+  privateKey: string;
+}

@@ -5,4 +5,6 @@ export interface IActionButtonProps {
   onClick?: () => void;
   startIcon?: React.ReactNode;
   disabled?: boolean;
+
+  square?:boolean;
 }
