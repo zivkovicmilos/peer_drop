@@ -10,8 +10,10 @@ import NoData from '../../atoms/NoData/NoData';
 import useSnackbar from '../Snackbar/useSnackbar.hook';
 import { IContactsTableProps } from './contactsTable.types';
 
-const ContactsTable: FC<IContactsTableProps> = () => {
+const ContactsTable: FC<IContactsTableProps> = (props) => {
   const history = useHistory();
+
+  const { handleDelete } = props;
 
   const handleEdit = (contactId: string | number) => {
     history.push('/contacts/' + contactId + '/edit');
@@ -49,7 +51,9 @@ const ContactsTable: FC<IContactsTableProps> = () => {
       width: 130,
       cellClassName: 'muiGridTableCell',
       renderCell: (params: GridCellParams) => {
-        const id = params.id;
+        const id = params.id as string;
+        const name = params.getValue(params.id, 'name') as string;
+        const publicKey = params.getValue(params.id, 'publicKey') as string;
 
         return (
           <Box display={'flex'} alignItems={'center'}>
@@ -64,6 +68,9 @@ const ContactsTable: FC<IContactsTableProps> = () => {
             <IconButton
               style={{
                 marginLeft: '1rem'
+              }}
+              onClick={() => {
+                handleDelete({ id, name, publicKey });
               }}
             >
               <DeleteRoundedIcon
