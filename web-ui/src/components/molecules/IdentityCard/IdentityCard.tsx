@@ -1,18 +1,69 @@
-import { Avatar, Box, IconButton, Typography } from '@material-ui/core';
+import {
+  Avatar,
+  Box,
+  IconButton,
+  Menu,
+  MenuItem,
+  Typography
+} from '@material-ui/core';
 import { makeStyles } from '@material-ui/core/styles';
 import { MoreVertRounded } from '@material-ui/icons';
 import TodayRoundedIcon from '@material-ui/icons/TodayRounded';
 import VpnKeyRoundedIcon from '@material-ui/icons/VpnKeyRounded';
 import clsx from 'clsx';
-import { FC } from 'react';
+import { FC, useState } from 'react';
 import { ReactComponent as WorkspacesRoundedIcon } from '../../../shared/assets/icons/workspaces_black_24dp.svg';
 import theme from '../../../theme/theme';
-import { IIdentityCardProps } from './identityCard.types';
+import {
+  EIdentityCardMenuItem,
+  IIdentityCardProps
+} from './identityCard.types';
 
 const IdentityCard: FC<IIdentityCardProps> = (props) => {
   const { picture, name, publicKeyID, numWorkspaces, creationDate } = props;
 
   const classes = useStyles();
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+
+  const handleClick = (event: any) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleClose = () => {
+    setAnchorEl(null);
+  };
+
+  interface IdentityCardMenuItem {
+    type: EIdentityCardMenuItem;
+    onClick: () => void; // TODO add id here
+  }
+
+  const menuItems: IdentityCardMenuItem[] = [
+    {
+      type: EIdentityCardMenuItem.EDIT,
+      onClick: () => {
+        // TODO define
+      }
+    },
+    {
+      type: EIdentityCardMenuItem.SHARE,
+      onClick: () => {
+        // TODO define
+      }
+    },
+    {
+      type: EIdentityCardMenuItem.BACKUP,
+      onClick: () => {
+        // TODO define
+      }
+    },
+    {
+      type: EIdentityCardMenuItem.SET_IDENTITY,
+      onClick: () => {
+        // TODO define
+      }
+    }
+  ];
 
   return (
     <Box className={classes.identityCardWrapper}>
@@ -30,7 +81,7 @@ const IdentityCard: FC<IIdentityCardProps> = (props) => {
           </Box>
         </Box>
         <Box>
-          <IconButton>
+          <IconButton onClick={handleClick}>
             <MoreVertRounded
               style={{
                 fill: 'black',
@@ -103,6 +154,25 @@ const IdentityCard: FC<IIdentityCardProps> = (props) => {
             </Typography>
           </Box>
         </Box>
+        <Menu
+          anchorEl={anchorEl}
+          open={Boolean(anchorEl)}
+          onClose={handleClose}
+        >
+          {menuItems.map((menuItem) => {
+            return (
+              <MenuItem
+                onClick={() => {
+                  menuItem.onClick();
+                  handleClose();
+                }}
+                className={classes.identityMenuItem}
+              >
+                {menuItem.type}
+              </MenuItem>
+            );
+          })}
+        </Menu>
       </Box>
     </Box>
   );
@@ -127,6 +197,12 @@ const useStyles = makeStyles(() => {
     },
     identitySubtext: {
       fontSize: '0.875rem'
+    },
+    identityMenuItem: {
+      fontFamily: 'Montserrat',
+      fontWeight: 500,
+      fontSize: '0.875rem',
+      color: 'black'
     }
   };
 });

@@ -52,7 +52,7 @@ const Identities: FC<IIdentitiesProps> = () => {
       creationDate: '20.08.2021.'
     },
     {
-      id: '1',
+      id: '2',
       picture: '1',
       name: 'Milos',
 
@@ -61,7 +61,7 @@ const Identities: FC<IIdentitiesProps> = () => {
       creationDate: '20.08.2021.'
     },
     {
-      id: '1',
+      id: '2',
       picture: '1',
       name: 'Milos',
 
@@ -70,7 +70,7 @@ const Identities: FC<IIdentitiesProps> = () => {
       creationDate: '20.08.2021.'
     },
     {
-      id: '1',
+      id: '3',
       picture: '1',
       name: 'Milos',
 
@@ -79,7 +79,7 @@ const Identities: FC<IIdentitiesProps> = () => {
       creationDate: '20.08.2021.'
     },
     {
-      id: '1',
+      id: '4',
       picture: '1',
       name: 'Milos',
 
