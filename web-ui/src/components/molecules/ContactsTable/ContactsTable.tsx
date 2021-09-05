@@ -53,7 +53,7 @@ const ContactsTable: FC<IContactsTableProps> = (props) => {
       renderCell: (params: GridCellParams) => {
         const id = params.id as string;
         const name = params.getValue(params.id, 'name') as string;
-        const publicKey = params.getValue(params.id, 'publicKey') as string;
+        const publicKey = params.getValue(params.id, 'publicKeyID') as string;
 
         return (
           <Box display={'flex'} alignItems={'center'}>

@@ -1,13 +1,29 @@
-import { Backdrop, Fade, Modal } from '@material-ui/core';
+import {
+  Backdrop,
+  Box,
+  Fade,
+  IconButton,
+  Modal,
+  Typography
+} from '@material-ui/core';
 import { makeStyles } from '@material-ui/core/styles';
+import CloseRoundedIcon from '@material-ui/icons/CloseRounded';
 import { FC } from 'react';
+import ModalButton from '../../atoms/ModalButton/ModalButton';
+import { EModalButtonType } from '../../atoms/ModalButton/modalButton.types';
 import { IContactsConfirmModalProps } from './contactsConfirmModal.types';
 
 const ContactsConfirmModal: FC<IContactsConfirmModalProps> = (props) => {
   const { open, contactInfo, handleConfirm } = props;
   const classes = useStyles();
 
-  console.log(contactInfo);
+  const renderContactInfo = () => {
+    return (
+      <Typography
+        className={classes.modalSubtext}
+      >{`${contactInfo.name} · ${contactInfo.publicKey}`}</Typography>
+    );
+  };
 
   return (
     <Modal
@@ -21,11 +37,49 @@ const ContactsConfirmModal: FC<IContactsConfirmModalProps> = (props) => {
       }}
     >
       <Fade in={open}>
-        <div className={classes.paper}>
-          <h2 id="transition-modal-title">Transition modal</h2>
-          <p id="transition-modal-description">
-            react-transition-group animates me.
-          </p>
+        <div className={classes.modalWrapper}>
+          <Box
+            display={'flex'}
+            alignItems={'center'}
+            justifyContent={'space-between'}
+          >
+            <Typography className={classes.modalTitle}>
+              Are you sure?
+            </Typography>
+            <IconButton onClick={() => handleConfirm(false)}>
+              <CloseRoundedIcon
+                style={{
+                  width: '20px',
+                  height: 'auto'
+                }}
+              />
+            </IconButton>
+          </Box>
+          <Box display={'flex'} flexDirection={'column'} mt={5}>
+            <Typography className={classes.modalTextMain}>
+              You are about to delete:
+            </Typography>
+            {renderContactInfo()}
+          </Box>
+          <Box
+            display={'flex'}
+            alignItems={'center'}
+            justifyContent={'center'}
+            width={'100%'}
+            mt={5}
+          >
+            <ModalButton
+              handleConfirm={() => handleConfirm(true)}
+              type={EModalButtonType.FILLED}
+              text={'Confirm'}
+            />
+            <ModalButton
+              handleConfirm={() => handleConfirm(false)}
+              type={EModalButtonType.OUTLINED}
+              text={'Cancel'}
+              margins={'0 0 0 16px'}
+            />
+          </Box>
         </div>
       </Fade>
     </Modal>
@@ -39,11 +93,24 @@ const useStyles = makeStyles((theme) => {
       alignItems: 'center',
       justifyContent: 'center'
     },
-    paper: {
+    modalTitle: {
+      fontWeight: 600,
+      fontSize: '1.5rem'
+    },
+    modalWrapper: {
       backgroundColor: theme.palette.background.paper,
-      border: '2px solid #000',
-      boxShadow: theme.shadows[5],
-      padding: theme.spacing(2, 4, 3)
+      boxShadow: theme.palette.boxShadows.darker,
+      padding: '20px 30px',
+      // TODO add responsive features
+      width: '400px',
+      height: 'auto',
+      border: 'none',
+      outline: 'none',
+      borderRadius: '15px'
+    },
+    modalTextMain: {},
+    modalSubtext: {
+      fontWeight: 500
     }
   };
 });

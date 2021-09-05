@@ -1,5 +1,4 @@
 import { Box } from '@material-ui/core';
-import { makeStyles } from '@material-ui/core/styles';
 import AddRoundedIcon from '@material-ui/icons/AddRounded';
 import { FC, useState } from 'react';
 import { useHistory } from 'react-router-dom';
@@ -14,13 +13,13 @@ const Contacts: FC<IContactsProps> = () => {
 
   const [confirmOpen, setConfirmOpen] = useState<boolean>(false);
   const [confirmInfo, setConfirmInfo] = useState<IContactConfirmInfo>({
-    id: '1',
-    name: 'Milos Zivkovic',
-    publicKey: '12345'
+    id: '',
+    name: '',
+    publicKey: ''
   });
 
   const handleConfirm = (confirmed: boolean) => {
-    console.log('Confirmed');
+    console.log(confirmed);
 
     setConfirmOpen(false);
   };
@@ -70,9 +69,5 @@ const Contacts: FC<IContactsProps> = () => {
     </Box>
   );
 };
-
-const useStyles = makeStyles(() => {
-  return {};
-});
 
 export default Contacts;
