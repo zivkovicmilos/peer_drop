@@ -6,12 +6,15 @@ import NewWorkspaceContext, {
 } from '../../../context/NewWorkspaceContext';
 import {
   ENewWorkspaceType,
+  ENWAccessControl,
   INWAccessControlContacts,
   INWAccessControlPassword,
   INWPermissions
 } from '../../../context/newWorkspaceContext.types';
 import Link from '../../atoms/Link/Link';
 import PageTitle from '../../atoms/PageTitle/PageTitle';
+import NewWorkspaceParameters from '../../molecules/NewWorkspaceParameters/NewWorkspaceParameters';
+import NewWorkspaceSecurity from '../../molecules/NewWorkspaceSecurity/NewWorkspaceSecurity';
 import NewWorkspaceSteps from '../../molecules/NewWorkspaceSteps/NewWorkspaceSteps';
 import { ENewWorkspaceStep, INewWorkspaceProps } from './newWorkspace.types';
 
@@ -29,11 +32,13 @@ const NewWorkspace: FC<INewWorkspaceProps> = () => {
     ENewWorkspaceType.SEND_ONLY
   );
 
-  const [accessControl, setAccessControl] = useState<
-    INWAccessControlContacts | INWAccessControlPassword
-  >({
+  const [accessControl, setAccessControl] = useState<INWAccessControlContacts | INWAccessControlPassword>({
     contactIDs: []
   });
+
+  const [accessControlType, setAccessControlType] = useState<ENWAccessControl>(
+    ENWAccessControl.SPECIFIC_CONTACTS
+  );
 
   const [permissions, setPermissions] = useState<INWPermissions>({
     autocloseWorkspace: {
@@ -47,15 +52,48 @@ const NewWorkspace: FC<INewWorkspaceProps> = () => {
     }
   });
 
+  const handleBack = () => {
+    if (step > 0) {
+      let newStep = step - 1;
+      setStep(newStep);
+    }
+  };
+
+  const handleNext = () => {
+    if (step < steps.length - 1) {
+      let newStep = step + 1;
+      setStep(newStep);
+    }
+  };
+
   const newWorkspaceContextValue: INewWorkspaceContext = {
+    step,
+    setStep,
     workspaceName,
     workspaceType,
     setWorkspaceName,
     setWorkspaceType,
     accessControl,
+    accessControlType,
     setAccessControl,
+    setAccessControlType,
     permissions,
-    setPermissions
+    setPermissions,
+    handleBack,
+    handleNext
+  };
+
+  const renderSection = () => {
+    switch (step) {
+      case 0:
+        return <NewWorkspaceParameters />;
+      case 1:
+        return <NewWorkspaceSecurity />;
+      case 2:
+        return <NewWorkspaceParameters />;
+      case 3:
+        return <NewWorkspaceParameters />;
+    }
   };
 
   return (
@@ -76,7 +114,7 @@ const NewWorkspace: FC<INewWorkspaceProps> = () => {
           </Box>
         </Box>
         <Box display={'flex'} width={'100%'} mt={4}>
-          <Box>This is the area</Box>
+          {renderSection()}
           <Box ml={'auto'}>
             <NewWorkspaceSteps
               currentStep={steps[step]}

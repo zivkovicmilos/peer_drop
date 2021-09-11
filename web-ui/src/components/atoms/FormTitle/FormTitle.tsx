@@ -8,12 +8,12 @@ const FormTitle: FC<IFormTitleProps> = (props) => {
   const { title } = props;
   const classes = useStyles();
 
-  return <Typography className={classes.pageTitle}>{title}</Typography>;
+  return <Typography className={classes.formTitle}>{title}</Typography>;
 };
 
 const useStyles = makeStyles(() => {
   return {
-    pageTitle: {
+    formTitle: {
       fontWeight: 600,
       fontSize: theme.typography.pxToRem(16)
     }
