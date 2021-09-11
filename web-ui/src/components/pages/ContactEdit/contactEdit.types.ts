@@ -12,6 +12,7 @@ export interface IContactEditParams {
 }
 
 export interface IKeyPair {
+  keyID: string;
   publicKey: string;
   privateKey: string;
 }

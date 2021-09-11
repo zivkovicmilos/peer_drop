@@ -1,4 +1,6 @@
+import { IKeyPair } from '../../pages/ContactEdit/contactEdit.types';
+
 export interface IKeyListProps {
-  addedKeys: string[];
-  handleKeyRemove: (key: string) => void;
+  addedKey: IKeyPair;
+  handleKeyRemove: (key: IKeyPair) => void;
 }

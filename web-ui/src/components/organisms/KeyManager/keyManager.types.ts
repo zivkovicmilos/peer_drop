@@ -1,15 +1,21 @@
+import { IKeyPair } from '../../pages/ContactEdit/contactEdit.types';
+
 export interface IKeyManagerProps {
   visibleTypes: EKeyInputType[];
 
-  setAddedKeys: (keys: IKeysWrapper) => void;
-  addedKeys: IKeysWrapper;
-}
-
-export interface IKeysWrapper {
-  keys: string[];
+  setAddedKey: (key: IKeyPair) => void;
+  addedKey: IKeyPair;
+  keyListTitle?: string;
+  formik?: any;
 }
 
 export enum EKeyInputType {
   IMPORT = 'Import key',
-  ENTER = 'Enter key'
+  ENTER = 'Enter key',
+  GENERATE = 'Generate key'
+}
+
+export enum EKeyGenerateType {
+  RSA_2048 = 'RSA-2048',
+  RSA_4096 = 'RSA-4096'
 }

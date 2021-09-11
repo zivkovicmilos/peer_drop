@@ -12,10 +12,7 @@ import Link from '../../atoms/Link/Link';
 import PageTitle from '../../atoms/PageTitle/PageTitle';
 import useSnackbar from '../../molecules/Snackbar/useSnackbar.hook';
 import KeyManager from '../../organisms/KeyManager/KeyManager';
-import {
-  EKeyInputType,
-  IKeysWrapper
-} from '../../organisms/KeyManager/keyManager.types';
+import { EKeyInputType } from '../../organisms/KeyManager/keyManager.types';
 import {
   EContactEditType,
   IContactEditParams,
@@ -30,13 +27,13 @@ const ContactEdit: FC<IContactEditProps> = (props) => {
     type === EContactEditType.NEW ? 'New Contact' : 'Edit Contact';
 
   const [errorMessage, setErrorMessage] = useState<string>();
-  const [addedKeys, setAddedKeys] = useState<IKeysWrapper>({ keys: [] });
+  const [addedKey, setAddedKey] = useState<IKeyPair>(null);
   const [initialValues, setInitialValues] = useState<{
     name: string;
-    keyPairs: IKeyPair[];
+    keyPair: IKeyPair;
   }>({
     name: '',
-    keyPairs: []
+    keyPair: null
   });
 
   const { contactId } = useParams() as IContactEditParams;
@@ -49,8 +46,8 @@ const ContactEdit: FC<IContactEditProps> = (props) => {
     onSubmit: (values, { resetForm }) => {
       setErrorMessage('');
 
-      if (values.keyPairs.length < 1) {
-        setErrorMessage('At least 1 public key is required');
+      if (values.keyPair == null) {
+        setErrorMessage('A key pair is required');
         return;
       }
     }
@@ -63,10 +60,10 @@ const ContactEdit: FC<IContactEditProps> = (props) => {
 
       setInitialValues({
         name: 'Milos Zivkovic',
-        keyPairs: [{ publicKey: '123', privateKey: '123' }]
+        keyPair: { keyID: '123', publicKey: '123', privateKey: '123' }
       });
 
-      setAddedKeys({ keys: ['123'] });
+      setAddedKey({ keyID: '123', publicKey: '123', privateKey: '123' });
     }
   }, []);
 
@@ -116,8 +113,8 @@ const ContactEdit: FC<IContactEditProps> = (props) => {
               <FormTitle title={'Public keys'} />
             </Box>
             <KeyManager
-              addedKeys={addedKeys}
-              setAddedKeys={setAddedKeys}
+              addedKey={addedKey}
+              setAddedKey={setAddedKey}
               visibleTypes={[EKeyInputType.IMPORT, EKeyInputType.ENTER]}
             />
           </Box>

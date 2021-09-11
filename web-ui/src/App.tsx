@@ -14,7 +14,7 @@ import ThemeProvider from './theme/ThemeProvider';
 function App() {
   const [userIdentity, setUserIdentity] = useState<IUserIdentity | null>({
     name: 'Milos',
-    keyID: '123456',
+    keyID: '4AEE18F83AFDEB23',
     picture: 'https://static.dw.com/image/58133780_6.jpg'
   });
   const [searchContext, setSearchContext] = useState<ESearchContext>(

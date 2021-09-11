@@ -11,7 +11,10 @@ import { MoreVertRounded } from '@material-ui/icons';
 import TodayRoundedIcon from '@material-ui/icons/TodayRounded';
 import VpnKeyRoundedIcon from '@material-ui/icons/VpnKeyRounded';
 import clsx from 'clsx';
-import { FC, useState } from 'react';
+import { FC, useContext, useState } from 'react';
+import { useHistory } from 'react-router-dom';
+import SessionContext from '../../../context/SessionContext';
+import { ReactComponent as CurrentIdentity } from '../../../shared/assets/icons/verified_black_24dp.svg';
 import { ReactComponent as WorkspacesRoundedIcon } from '../../../shared/assets/icons/workspaces_black_24dp.svg';
 import theme from '../../../theme/theme';
 import {
@@ -21,6 +24,8 @@ import {
 
 const IdentityCard: FC<IIdentityCardProps> = (props) => {
   const { picture, name, publicKeyID, numWorkspaces, creationDate } = props;
+
+  const { userIdentity } = useContext(SessionContext);
 
   const classes = useStyles();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -35,31 +40,33 @@ const IdentityCard: FC<IIdentityCardProps> = (props) => {
 
   interface IdentityCardMenuItem {
     type: EIdentityCardMenuItem;
-    onClick: () => void; // TODO add id here
+    onClick: (identityId: string) => void;
   }
+
+  const history = useHistory();
 
   const menuItems: IdentityCardMenuItem[] = [
     {
       type: EIdentityCardMenuItem.EDIT,
-      onClick: () => {
-        // TODO define
+      onClick: (identityId: string) => {
+        history.push(`identities/${identityId}/edit`);
       }
     },
     {
       type: EIdentityCardMenuItem.SHARE,
-      onClick: () => {
+      onClick: (identityId: string) => {
         // TODO define
       }
     },
     {
       type: EIdentityCardMenuItem.BACKUP,
-      onClick: () => {
+      onClick: (identityId: string) => {
         // TODO define
       }
     },
     {
       type: EIdentityCardMenuItem.SET_IDENTITY,
-      onClick: () => {
+      onClick: (identityId: string) => {
         // TODO define
       }
     }
@@ -79,6 +86,17 @@ const IdentityCard: FC<IIdentityCardProps> = (props) => {
               {name}
             </Typography>
           </Box>
+
+          {userIdentity.keyID == publicKeyID && (
+            <Box ml={0.5}>
+              <CurrentIdentity
+                style={{
+                  width: '15px',
+                  height: 'auto'
+                }}
+              />
+            </Box>
+          )}
         </Box>
         <Box>
           <IconButton onClick={handleClick}>
@@ -163,7 +181,7 @@ const IdentityCard: FC<IIdentityCardProps> = (props) => {
             return (
               <MenuItem
                 onClick={() => {
-                  menuItem.onClick();
+                  menuItem.onClick(publicKeyID);
                   handleClose();
                 }}
                 className={classes.identityMenuItem}

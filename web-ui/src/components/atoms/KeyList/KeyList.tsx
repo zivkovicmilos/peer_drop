@@ -5,10 +5,10 @@ import { FC } from 'react';
 import { IKeyListProps } from './keyList.types';
 
 const KeyList: FC<IKeyListProps> = (props) => {
-  const { addedKeys, handleKeyRemove } = props;
+  const { addedKey, handleKeyRemove } = props;
 
-  if (addedKeys.length == 0) {
-    return <Typography>No keys added</Typography>;
+  if (addedKey == null) {
+    return <Typography>No key pair added</Typography>;
   } else {
     return (
       <Box
@@ -18,37 +18,33 @@ const KeyList: FC<IKeyListProps> = (props) => {
         height={'100%'}
         marginLeft={'-15px'}
       >
-        {addedKeys.map((addedKey) => {
-          return (
-            <Box
-              display={'flex'}
-              alignItems={'center'}
-              marginLeft={'15px'}
-              justifyContent={'space-between'}
-            >
-              <Box display={'flex'} alignItems={'center'}>
-                <VpnKeyRoundedIcon />
-                <Box ml={1}>
-                  <Typography style={{ fontSize: '0.875rem' }}>
-                    {addedKey}
-                  </Typography>
-                </Box>
-              </Box>
-
-              <Box ml={'8px'}>
-                <IconButton onClick={() => handleKeyRemove(addedKey)}>
-                  <CloseRoundedIcon
-                    style={{
-                      fill: 'black',
-                      width: '20px',
-                      height: 'auto'
-                    }}
-                  />
-                </IconButton>
-              </Box>
+        <Box
+          display={'flex'}
+          alignItems={'center'}
+          marginLeft={'15px'}
+          justifyContent={'space-between'}
+        >
+          <Box display={'flex'} alignItems={'center'}>
+            <VpnKeyRoundedIcon />
+            <Box ml={1}>
+              <Typography style={{ fontSize: '0.875rem' }}>
+                {addedKey.keyID}
+              </Typography>
             </Box>
-          );
-        })}
+          </Box>
+
+          <Box ml={'8px'}>
+            <IconButton onClick={() => handleKeyRemove(addedKey)}>
+              <CloseRoundedIcon
+                style={{
+                  fill: 'black',
+                  width: '20px',
+                  height: 'auto'
+                }}
+              />
+            </IconButton>
+          </Box>
+        </Box>
       </Box>
     );
   }

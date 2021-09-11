@@ -24,7 +24,7 @@ const Identities: FC<IIdentitiesProps> = () => {
     EIdentitySortDirection.ASC
   );
 
-  const handleNewContact = () => {
+  const handleNewIdentity = () => {
     history.push('/identities/new');
   };
 
@@ -44,7 +44,7 @@ const Identities: FC<IIdentitiesProps> = () => {
   const identities: IIdentity[] = [
     {
       id: '1',
-      picture: '1',
+      picture: 'https://static.dw.com/image/58133780_6.jpg',
       name: 'Milos',
 
       publicKeyID: '4AEE18F83AFDEB23',
@@ -107,7 +107,7 @@ const Identities: FC<IIdentitiesProps> = () => {
         <ActionButton
           text={'New identity'}
           startIcon={<AddRoundedIcon />}
-          onClick={handleNewContact}
+          onClick={handleNewIdentity}
         />
       </Box>
 

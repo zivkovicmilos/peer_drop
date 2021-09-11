@@ -1,8 +1,8 @@
 import { createContext } from 'react';
 import { ESearchContext, IUserIdentity } from './sessionContext.types';
 
-export interface ISessionContext<User = IUserIdentity | null> {
-  userIdentity: User;
+export interface ISessionContext<Identity = IUserIdentity | null> {
+  userIdentity: Identity;
   searchContext: ESearchContext;
   setUserIdentity: (user: IUserIdentity | null) => void;
   setSearchContext: (searchContext: ESearchContext | null) => void;

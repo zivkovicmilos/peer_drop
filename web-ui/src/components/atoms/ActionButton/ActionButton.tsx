@@ -5,7 +5,14 @@ import { FC } from 'react';
 import { IActionButtonProps } from './actionButton.types';
 
 const ActionButton: FC<IActionButtonProps> = (props) => {
-  const { text, onClick, startIcon, disabled = false, square = false } = props;
+  const {
+    text,
+    onClick,
+    startIcon,
+    disabled = false,
+    square = false,
+    shouldSubmit = true
+  } = props;
 
   const classes = useStyles();
 
@@ -16,7 +23,7 @@ const ActionButton: FC<IActionButtonProps> = (props) => {
       className={clsx('actionButtonRounded', {
         [classes.actionButtonSquare]: square
       })}
-      type={'submit'}
+      type={shouldSubmit ? 'submit' : 'button'}
       color={'primary'}
       startIcon={startIcon}
       disabled={disabled}
@@ -29,7 +36,7 @@ const ActionButton: FC<IActionButtonProps> = (props) => {
 const useStyles = makeStyles((theme) => {
   return {
     actionButtonSquare: {
-      borderRadius: '5px'
+      borderRadius: '5px !important'
     }
   };
 });

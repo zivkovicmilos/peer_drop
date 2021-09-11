@@ -7,4 +7,5 @@ export interface IActionButtonProps {
   disabled?: boolean;
 
   square?:boolean;
+  shouldSubmit?:boolean;
 }
