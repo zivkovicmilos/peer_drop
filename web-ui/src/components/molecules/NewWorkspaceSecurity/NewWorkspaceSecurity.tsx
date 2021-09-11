@@ -7,7 +7,7 @@ import {
 } from '@material-ui/core';
 import InfoRoundedIcon from '@material-ui/icons/InfoRounded';
 import { useFormik } from 'formik';
-import { FC, useContext } from 'react';
+import { FC, useContext, useState } from 'react';
 import NewWorkspaceContext from '../../../context/NewWorkspaceContext';
 import {
   ENWAccessControl,
@@ -19,6 +19,7 @@ import theme from '../../../theme/theme';
 import FormTitle from '../../atoms/FormTitle/FormTitle';
 import StepButton from '../../atoms/StepButton/StepButton';
 import PasswordStrength from '../PasswordStrength/PasswordStrength';
+import SpecificContacts from '../SpecificContacts/SpecificContacts';
 import { INewWorkspaceSecurityProps } from './newWorkspaceSecurity.types';
 
 const NewWorkspaceSecurity: FC<INewWorkspaceSecurityProps> = () => {
@@ -32,6 +33,8 @@ const NewWorkspaceSecurity: FC<INewWorkspaceSecurityProps> = () => {
     step
   } = useContext(NewWorkspaceContext);
 
+  const [errorMessage, setErrorMessage] = useState<string>('');
+
   const securityFormik = useFormik({
     initialValues: {
       accessControlType: accessControlType,
@@ -44,15 +47,23 @@ const NewWorkspaceSecurity: FC<INewWorkspaceSecurityProps> = () => {
         : '',
       contactIDs:
         accessControlType == ENWAccessControl.SPECIFIC_CONTACTS
-          ? (accessControl as INWAccessControlContacts).contactIDs
+          ? (accessControl as INWAccessControlContacts).contacts
           : []
     },
     validationSchema: nwSecurityPasswordSchema,
     onSubmit: (values, { resetForm }) => {
+      setErrorMessage('');
+
       if (accessControlType == ENWAccessControl.PASSWORD) {
         setAccessControl({ password: values.password });
       } else {
-        setAccessControl({ contactIDs: values.contactIDs });
+        if (values.contactIDs.length < 1) {
+          setErrorMessage('At least 1 contact is required');
+
+          return;
+        }
+
+        setAccessControl({ contacts: values.contactIDs });
       }
 
       handleNext();
@@ -119,7 +130,12 @@ const NewWorkspaceSecurity: FC<INewWorkspaceSecurityProps> = () => {
         )}
 
         {accessControlType == ENWAccessControl.SPECIFIC_CONTACTS && (
-          <Box>Specific contacts</Box>
+          <Box mb={4}>
+            <SpecificContacts
+              formik={securityFormik}
+              errorMessage={errorMessage}
+            />
+          </Box>
         )}
         <Box display={'flex'} alignItems={'center'}>
           <Box mr={2}>

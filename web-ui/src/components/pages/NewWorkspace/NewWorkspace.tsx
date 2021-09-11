@@ -33,7 +33,7 @@ const NewWorkspace: FC<INewWorkspaceProps> = () => {
   );
 
   const [accessControl, setAccessControl] = useState<INWAccessControlContacts | INWAccessControlPassword>({
-    contactIDs: []
+    contacts: []
   });
 
   const [accessControlType, setAccessControlType] = useState<ENWAccessControl>(

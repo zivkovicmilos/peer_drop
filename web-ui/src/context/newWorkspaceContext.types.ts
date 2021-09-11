@@ -15,7 +15,13 @@ export enum ENWAccessControl {
 }
 
 export interface INWAccessControlContacts {
-  contactIDs: string[];
+  contacts: ContactResponse[];
+}
+
+export interface ContactResponse {
+  id: string;
+  name: string;
+  publicKeyID: string;
 }
 
 export interface INWAccessControlPassword {
