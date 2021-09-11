@@ -13,6 +13,7 @@ import KeyboardArrowDownRoundedIcon from '@material-ui/icons/KeyboardArrowDownRo
 import KeyboardArrowUpRoundedIcon from '@material-ui/icons/KeyboardArrowUpRounded';
 import clsx from 'clsx';
 import React, { FC, Fragment, useRef, useState } from 'react';
+import { useHistory } from 'react-router-dom';
 import Link from '../../atoms/Link/Link';
 import { IMenuActionButtonProps } from './menuActionButton.types';
 
@@ -21,6 +22,7 @@ const MenuActionButton: FC<IMenuActionButtonProps> = () => {
   const anchorRef = useRef<HTMLDivElement>(null);
 
   const classes = useStyles();
+  const history = useHistory();
 
   const handleToggle = () => {
     setOpen((prevOpen) => !prevOpen);
@@ -50,7 +52,9 @@ const MenuActionButton: FC<IMenuActionButtonProps> = () => {
         }}
       >
         <Button
-          onClick={() => {}}
+          onClick={() => {
+            history.push('/workspaces/new');
+          }}
           className={clsx(classes.mainButton, classes.rounded)}
           color={'primary'}
         >
