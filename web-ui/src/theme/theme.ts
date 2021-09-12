@@ -36,7 +36,8 @@ const theme: Theme = createTheme({
       lightGreen: 'linear-gradient(66.19deg, #D0F4DE 2.2%, #EEFBF3 100%)',
       lightPink: 'linear-gradient(66.19deg, #FF99C8 2.2%, #FFADD3 100%)',
       lightPurple: 'linear-gradient(66.19deg, #E4C1F9 2.2%, #EFDAFB 100%)',
-      lightYellow: 'linear-gradient(66.19deg, #FCF6BD 2.2%, #FDF9D8 100%)'
+      lightYellow: 'linear-gradient(66.19deg, #FCF6BD 2.2%, #FDF9D8 100%)',
+      lightBrown: 'linear-gradient(66.19deg, #D8D3CC 2.2%, #FFE7CA 100%)'
     }
   },
   typography: {

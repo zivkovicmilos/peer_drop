@@ -34,4 +34,5 @@ interface CustomWorkspaceGradients {
   lightYellow: string;
   lightPurple: string;
   lightPink: string;
+  lightBrown: string
 }

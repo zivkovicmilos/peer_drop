@@ -12,7 +12,7 @@ const SingleWorkspace: FC<ISingleWorkspaceProps> = (props) => {
   const classes = useStyles();
 
   const generateBackgroundColor = () => {
-    switch (getRandomNum(0, 4)) {
+    switch (getRandomNum(0, 5)) {
       case 0:
         return theme.palette.workspaceGradients.lightBlue;
       case 1:
@@ -23,6 +23,8 @@ const SingleWorkspace: FC<ISingleWorkspaceProps> = (props) => {
         return theme.palette.workspaceGradients.lightPink;
       case 4:
         return theme.palette.workspaceGradients.lightPurple;
+      case 5:
+        return theme.palette.workspaceGradients.lightBrown;
     }
   };
 
