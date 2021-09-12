@@ -131,7 +131,7 @@ const NewWorkspace: FC<INewWorkspaceProps> = () => {
               />
             </IconButton>
           </Link>
-          <Box>
+          <Box ml={2}>
             <PageTitle title={sectionTitle} />
           </Box>
         </Box>

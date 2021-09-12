@@ -6,6 +6,7 @@ import Contacts from '../components/pages/Contacts/Contacts';
 import Identities from '../components/pages/Identities/Identities';
 import IdentityEdit from '../components/pages/IdentityEdit/IdentityEdit';
 import { EIdentityEditType } from '../components/pages/IdentityEdit/identityEdit.types';
+import JoinWorkspace from '../components/pages/JoinWorkspace/JoinWorkspace';
 import NewWorkspace from '../components/pages/NewWorkspace/NewWorkspace';
 import Settings from '../components/pages/Settings/Settings';
 import Workspaces from '../components/pages/Workspaces/Workspaces';
@@ -15,6 +16,7 @@ const AppRouter = () => (
     <Switch>
       <Route path={'/workspaces'} exact={true} component={Workspaces} />
       <Route path={'/workspaces/new'} exact={true} component={NewWorkspace} />
+      <Route path={'/workspaces/join'} exact={true} component={JoinWorkspace} />
 
       <Route path={'/contacts'} exact={true} component={Contacts} />
       <Route path={'/contacts/new'} exact={true}>

@@ -11,7 +11,12 @@ const NewWorkspaceReview: FC<INewWorkspaceReviewProps> = () => {
     handleBack,
     step,
     setSectionTitle,
-    setWorkspaceMnemonic
+    setWorkspaceMnemonic,
+    workspaceName,
+    workspaceType,
+    accessControlType,
+    accessControl,
+    permissions
   } = useContext(NewWorkspaceContext);
 
   const handleConfirm = () => {
@@ -24,7 +29,13 @@ const NewWorkspaceReview: FC<INewWorkspaceReviewProps> = () => {
 
   return (
     <Box display={'flex'} flexDirection={'column'} width={'50%'}>
-      <NewWorkspaceInfo />
+      <NewWorkspaceInfo
+        accessControl={accessControl}
+        accessControlType={accessControlType}
+        permissions={permissions}
+        workspaceName={workspaceName}
+        workspaceType={workspaceType}
+      />
       <Box display={'flex'} alignItems={'center'}>
         <Box mr={2}>
           <StepButton

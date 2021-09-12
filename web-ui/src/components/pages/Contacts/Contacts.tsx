@@ -19,8 +19,6 @@ const Contacts: FC<IContactsProps> = () => {
   });
 
   const handleConfirm = (confirmed: boolean) => {
-    console.log(confirmed);
-
     setConfirmOpen(false);
   };
 

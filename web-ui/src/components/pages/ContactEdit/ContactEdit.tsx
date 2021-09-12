@@ -86,7 +86,7 @@ const ContactEdit: FC<IContactEditProps> = (props) => {
             />
           </IconButton>
         </Link>
-        <Box>
+        <Box ml={2}>
           <PageTitle title={pageTitle} />
         </Box>
       </Box>

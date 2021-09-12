@@ -1,7 +1,6 @@
 import { Box, Typography } from '@material-ui/core';
 import { makeStyles } from '@material-ui/core/styles';
-import { FC, Fragment, useContext } from 'react';
-import NewWorkspaceContext from '../../../context/NewWorkspaceContext';
+import { FC, Fragment } from 'react';
 import {
   ENWAccessControl,
   INWAccessControlContacts
@@ -16,7 +15,7 @@ const NewWorkspaceInfo: FC<INewWorkspaceInfoProps> = (props) => {
     accessControl,
     permissions,
     accessControlType
-  } = useContext(NewWorkspaceContext);
+  } = props;
 
   const classes = useStyles();
 
@@ -104,11 +103,12 @@ const useStyles = makeStyles(() => {
   return {
     reviewTitle: {
       fontWeight: 600,
-      fontSize: theme.typography.pxToRem(18)
+      fontSize: theme.typography.pxToRem(16)
     },
     reviewItem: {
       fontWeight: 600,
-      color: '#9C9C9C'
+      color: '#9C9C9C',
+      fontSize: theme.typography.pxToRem(16)
     }
   };
 });

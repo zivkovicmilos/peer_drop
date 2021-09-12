@@ -9,7 +9,14 @@ import NewWorkspaceInfo from '../NewWorkspaceInfo/NewWorkspaceInfo';
 import { INewWorkspaceSuccessProps } from './newWorkspaceSuccess.types';
 
 const NewWorkspaceSuccess: FC<INewWorkspaceSuccessProps> = () => {
-  const { workspaceName, workspaceMnemonic } = useContext(NewWorkspaceContext);
+  const {
+    workspaceName,
+    workspaceType,
+    workspaceMnemonic,
+    accessControlType,
+    accessControl,
+    permissions
+  } = useContext(NewWorkspaceContext);
 
   const classes = useStyles();
 
@@ -35,7 +42,13 @@ const NewWorkspaceSuccess: FC<INewWorkspaceSuccessProps> = () => {
         <MnemonicCopy mnemonic={workspaceMnemonic} />
       </Box>
       <Box display={'flex'} flexDirection={'column'} width={'50%'} mt={4}>
-        <NewWorkspaceInfo />
+        <NewWorkspaceInfo
+          accessControl={accessControl}
+          accessControlType={accessControlType}
+          permissions={permissions}
+          workspaceName={workspaceName}
+          workspaceType={workspaceType}
+        />
       </Box>
     </Box>
   );
@@ -49,5 +62,5 @@ const useStyles = makeStyles(() => {
     }
   };
 });
-
+ 
 export default NewWorkspaceSuccess;

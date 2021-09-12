@@ -11,8 +11,24 @@ const SingleWorkspace: FC<ISingleWorkspaceProps> = (props) => {
 
   const classes = useStyles();
 
+  const generateBackgroundColor = () => {
+    switch (getRandomNum(0, 4)) {
+      case 0:
+        return theme.palette.workspaceGradients.lightBlue;
+      case 1:
+        return theme.palette.workspaceGradients.lightGreen;
+      case 2:
+        return theme.palette.workspaceGradients.lightYellow;
+      case 3:
+        return theme.palette.workspaceGradients.lightPink;
+      case 4:
+        return theme.palette.workspaceGradients.lightPurple;
+    }
+  };
+
   const [numPeers, setNumPeers] = useState<number>(0);
   const [numPeersText, setNumPeersText] = useState<string>('');
+  const [background, setBackground] = useState<string>('');
 
   enum CIRCLE_STATUS {
     GREEN,
@@ -24,6 +40,10 @@ const SingleWorkspace: FC<ISingleWorkspaceProps> = (props) => {
   useEffect(() => {
     let num = getRandomNum(0, 20);
     setNumPeers(num);
+  }, []);
+
+  useEffect(() => {
+    setBackground(generateBackgroundColor());
   }, []);
 
   useEffect(() => {
@@ -57,35 +77,11 @@ const SingleWorkspace: FC<ISingleWorkspaceProps> = (props) => {
     return Math.floor(Math.random() * (max - min + 1)) + min;
   };
 
-  const generateBackgroundColor = () => {
-    switch (getRandomNum(0, 4)) {
-      case 0:
-        return theme.palette.workspaceGradients.lightBlue;
-      case 1:
-        return theme.palette.workspaceGradients.lightGreen;
-      case 2:
-        return theme.palette.workspaceGradients.lightYellow;
-      case 3:
-        return theme.palette.workspaceGradients.lightPink;
-      case 4:
-        return theme.palette.workspaceGradients.lightPurple;
-    }
-  };
-  /*
-
-   <GreenCircle
-              style={{
-                width: '15px',
-                height: 'auto'
-              }}
-            />
-   */
-
   return (
     <Box
       className={classes.workspaceItemWrapper}
       style={{
-        background: generateBackgroundColor()
+        background: background
       }}
     >
       <Box ml={'auto'} display={'flex'} alignItems={'center'}>
@@ -94,14 +90,16 @@ const SingleWorkspace: FC<ISingleWorkspaceProps> = (props) => {
         </Typography>
         <Box ml={1} display={'flex'} alignItems={'center'}>
           {circle == CIRCLE_STATUS.GREEN ? (
-            <img src={greenCircle}
+            <img
+              src={greenCircle}
               style={{
                 width: '15px',
                 height: 'auto'
               }}
             />
           ) : (
-            <img src={redCircle}
+            <img
+              src={redCircle}
               style={{
                 width: '15px',
                 height: 'auto'

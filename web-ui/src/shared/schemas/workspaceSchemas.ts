@@ -5,6 +5,23 @@ const nwParametersSchema = yup.object({
   workspaceName: yup.string().defined('Workspace name is required')
 });
 
+const joinWorkspaceSchema = yup.object({
+  workspaceMnemonic: yup
+    .string()
+    .defined('The workspace mnemonic is required')
+    .test('Mnemonic test', 'Invalid mnemonic', function (value) {
+      let regex =
+        /^[a-zA-Z]+\s[a-zA-Z]+\s[a-zA-Z]+\s[a-zA-Z]+\s[a-zA-Z]+\s[a-zA-Z]+(\s)*$/gm;
+      if (value == null || value == '' || value == undefined) {
+        return false;
+      }
+
+      let matches = value.match(regex);
+
+      return matches && matches.length > 0;
+    })
+});
+
 const nwSecurityPasswordSchema = yup.object({
   accessControlType: yup.string().defined(),
   password: yup.string().when('accessControlType', {
@@ -61,4 +78,9 @@ const nwPermissionsSchema = yup.object({
   })
 });
 
-export { nwSecurityPasswordSchema, nwParametersSchema, nwPermissionsSchema };
+export {
+  nwSecurityPasswordSchema,
+  nwParametersSchema,
+  nwPermissionsSchema,
+  joinWorkspaceSchema
+};

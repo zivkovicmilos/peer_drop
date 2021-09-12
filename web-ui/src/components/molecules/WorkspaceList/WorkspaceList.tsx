@@ -1,6 +1,9 @@
 import { Box } from '@material-ui/core';
 import { makeStyles } from '@material-ui/core/styles';
-import { FC } from 'react';
+import { FC, useEffect } from 'react';
+import NoData from '../../atoms/NoData/NoData';
+import Pagination from '../../atoms/Pagination/Pagination';
+import usePagination from '../../atoms/Pagination/pagination.hook';
 import SingleWorkspace from '../../atoms/SingleWorkspace/SingleWorkspace';
 import { IWorkspaceListProps } from './workspaceList.types';
 
@@ -34,6 +37,14 @@ const WorkspaceList: FC<IWorkspaceListProps> = () => {
     }
   ];
 
+  const { page, count, setCount, limit, handlePageChange } = usePagination({
+    limit: 8
+  });
+
+  useEffect(() => {
+    setCount(workspaceList.length);
+  }, []);
+
   return (
     <Box className={classes.workspaceListWrapper}>
       {workspaceList.map((workspace, index) => {
@@ -44,6 +55,26 @@ const WorkspaceList: FC<IWorkspaceListProps> = () => {
           />
         );
       })}
+      <Box
+        display={'flex'}
+        alignItems={'center'}
+        justifyContent={'center'}
+        width={'100%'}
+        mt={8}
+      >
+        <Pagination
+          count={count}
+          limit={limit}
+          page={page}
+          onPageChange={handlePageChange}
+        />
+      </Box>
+
+      {workspaceList.length < 1 && (
+        <Box width={'100%'} mt={8}>
+          <NoData text={'No workspaces found'} />{' '}
+        </Box>
+      )}
     </Box>
   );
 };

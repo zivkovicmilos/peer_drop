@@ -91,7 +91,7 @@ const MenuActionButton: FC<IMenuActionButtonProps> = () => {
             <Paper>
               <ClickAwayListener onClickAway={handleClose}>
                 <Link
-                  to={'/join-workspace'}
+                  to={'/workspaces/join'}
                   style={{ textDecoration: 'none' }}
                   onClick={(event) => {
                     handleClose(event);
