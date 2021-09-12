@@ -29,6 +29,14 @@ const theme: Theme = createTheme({
     boxShadows: {
       main: '1px 3px 6px 0px rgba(128,142,155,0.1)',
       darker: '1px 3px 6px 0px rgba(128,142,155,0.3)'
+    },
+    workspaceGradients: {
+      lightBlue:
+        'linear-gradient(66.19deg, #A9DEF9 2.2%, #A9DEF9 2.21%, #D7F1FF 100%, #D7F1FF 100%)',
+      lightGreen: 'linear-gradient(66.19deg, #D0F4DE 2.2%, #EEFBF3 100%)',
+      lightPink: 'linear-gradient(66.19deg, #FF99C8 2.2%, #FFADD3 100%)',
+      lightPurple: 'linear-gradient(66.19deg, #E4C1F9 2.2%, #EFDAFB 100%)',
+      lightYellow: 'linear-gradient(66.19deg, #FCF6BD 2.2%, #FDF9D8 100%)'
     }
   },
   typography: {

@@ -4,11 +4,13 @@ declare module '@material-ui/core/styles/createPalette' {
   interface PaletteOptions {
     custom?: CustomThemeColors;
     boxShadows?: CustomBoxShadows;
+    workspaceGradients?: CustomWorkspaceGradients;
   }
 
   interface Palette {
     custom: CustomThemeColors;
     boxShadows: CustomBoxShadows;
+    workspaceGradients: CustomWorkspaceGradients;
   }
 }
 
@@ -24,4 +26,12 @@ interface CustomThemeColors {
 interface CustomBoxShadows {
   main: string;
   darker: string;
+}
+
+interface CustomWorkspaceGradients {
+  lightBlue: string;
+  lightGreen: string;
+  lightYellow: string;
+  lightPurple: string;
+  lightPink: string;
 }
