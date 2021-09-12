@@ -99,7 +99,12 @@ const IdentityCard: FC<IIdentityCardProps> = (props) => {
           )}
         </Box>
         <Box>
-          <IconButton onClick={handleClick}>
+          <IconButton
+            classes={{
+              root: 'iconButtonRoot'
+            }}
+            onClick={handleClick}
+          >
             <MoreVertRounded
               style={{
                 fill: 'black',

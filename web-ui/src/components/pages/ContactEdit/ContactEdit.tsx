@@ -74,7 +74,11 @@ const ContactEdit: FC<IContactEditProps> = (props) => {
           // TODO add unsaved changes modal
         }
         <Link to={'/contacts'}>
-          <IconButton>
+          <IconButton
+            classes={{
+              root: 'iconButtonRoot'
+            }}
+          >
             <ArrowBackRoundedIcon
               style={{
                 fill: 'black'

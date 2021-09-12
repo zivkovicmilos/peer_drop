@@ -69,7 +69,11 @@ const IdentityEdit: FC<IIdentityEditProps> = (props) => {
           // TODO add unsaved changes modal
         }
         <Link to={'/identities'}>
-          <IconButton>
+          <IconButton
+            classes={{
+              root: 'iconButtonRoot'
+            }}
+          >
             <ArrowBackRoundedIcon
               style={{
                 fill: 'black'

@@ -22,7 +22,12 @@ import useSnackbar from '../Snackbar/useSnackbar.hook';
 import { ISpecificContactsProps } from './specificContacts.types';
 
 const SpecificContacts: FC<ISpecificContactsProps> = (props) => {
-  const { formik } = props;
+  const {
+    listTitle = 'Permitted contacts',
+    disabled = false,
+    contactIDs,
+    setContactIDs
+  } = props;
 
   const classes = useStyles();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -39,12 +44,10 @@ const SpecificContacts: FC<ISpecificContactsProps> = (props) => {
     { list: ContactResponse[] } | undefined
   >({ list: [] });
 
-
-
   const [selectedContacts, setSelectedContacts] = useState<{
     list: ContactResponse[];
   }>({
-    list: formik.values.contactIDs
+    list: contactIDs.contacts
   });
 
   useEffect(() => {
@@ -177,21 +180,22 @@ const SpecificContacts: FC<ISpecificContactsProps> = (props) => {
   const handleDialogToggle = (open: boolean) => {
     setDialogOpen(open);
 
-    let contactIDs: string[] = [];
+    let contactIDs: ContactResponse[] = [];
     for (let i = 0; i < selectedContacts.list.length; i++) {
-      contactIDs.push(selectedContacts.list[i].id);
+      contactIDs.push(selectedContacts.list[i]);
     }
 
-    formik.values.contactIDs = contactIDs;
+    setContactIDs({ contacts: contactIDs });
   };
 
   return (
     <Box display={'flex'} flexDirection={'column'}>
       <Box display={'flex'} alignItems={'center'} mb={2}>
-        <FormTitle title={'Permitted contacts'} />
+        <FormTitle title={listTitle} />
         <Box ml={4}>
           <ActionButton
             text={'Select contacts'}
+            disabled={disabled}
             shouldSubmit={false}
             startIcon={<AddRoundedIcon />}
             onClick={() => {
@@ -219,9 +223,7 @@ const SpecificContacts: FC<ISpecificContactsProps> = (props) => {
               (selectedContact: ContactResponse, index) => {
                 return (
                   <Box mb={1} ml={1}>
-                    <Typography className={classes.selectedContact}>{`${
-                      index + 1
-                    }. ${selectedContact.name} (${
+                    <Typography>{`${index + 1}. ${selectedContact.name} (${
                       selectedContact.publicKeyID
                     })`}</Typography>
                   </Box>
@@ -258,7 +260,9 @@ const SpecificContacts: FC<ISpecificContactsProps> = (props) => {
             </Typography>
             <Box ml={'auto'}>
               <IconButton
-                aria-label="close"
+                classes={{
+                  root: 'iconButtonRoot'
+                }}
                 onClick={() => handleDialogToggle(false)}
               >
                 <CloseRoundedIcon />
@@ -337,8 +341,7 @@ const useStyles = makeStyles(() => {
     dialogTitle: {
       fontWeight: 600,
       fontSize: '1.2rem'
-    },
-    selectedContact: {}
+    }
   };
 });
 

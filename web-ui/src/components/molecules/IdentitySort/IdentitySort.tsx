@@ -57,7 +57,12 @@ const IdentitySort: FC<IIdentitySortProps> = (props) => {
       <Box display={'flex'} alignItems={'center'}>
         <Button onClick={handleClick}>{activeSort}</Button>
         <Box>
-          <IconButton onClick={() => handleDirectionChangeToggle()}>
+          <IconButton
+            classes={{
+              root: 'iconButtonRoot'
+            }}
+            onClick={() => handleDirectionChangeToggle()}
+          >
             {renderSortDirection()}
           </IconButton>
         </Box>

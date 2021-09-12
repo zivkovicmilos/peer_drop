@@ -7,9 +7,10 @@ import {
 } from '@material-ui/core';
 import InfoRoundedIcon from '@material-ui/icons/InfoRounded';
 import { useFormik } from 'formik';
-import { FC, useContext, useState } from 'react';
+import { FC, useContext, useEffect, useState } from 'react';
 import NewWorkspaceContext from '../../../context/NewWorkspaceContext';
 import {
+  ContactResponse,
   ENWAccessControl,
   INWAccessControlContacts,
   INWAccessControlPassword
@@ -80,6 +81,14 @@ const NewWorkspaceSecurity: FC<INewWorkspaceSecurityProps> = () => {
     securityFormik.values.accessControlType = type;
   };
 
+  const [contactIDs, setContactIDs] = useState<{ contacts: ContactResponse[] }>(
+    { contacts: securityFormik.values.contactIDs }
+  );
+
+  useEffect(() => {
+    securityFormik.values.contactIDs = contactIDs.contacts;
+  }, [contactIDs]);
+
   return (
     <Box display={'flex'} flexDirection={'column'} width={'50%'}>
       <form autoComplete={'off'} onSubmit={securityFormik.handleSubmit}>
@@ -132,7 +141,8 @@ const NewWorkspaceSecurity: FC<INewWorkspaceSecurityProps> = () => {
         {accessControlType == ENWAccessControl.SPECIFIC_CONTACTS && (
           <Box mb={4}>
             <SpecificContacts
-              formik={securityFormik}
+              contactIDs={contactIDs}
+              setContactIDs={setContactIDs}
               errorMessage={errorMessage}
             />
           </Box>

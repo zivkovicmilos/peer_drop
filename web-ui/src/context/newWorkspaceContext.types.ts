@@ -41,6 +41,6 @@ export interface INWPermissions {
 
   additionalOwners: {
     active: boolean;
-    contactIDs?: string[];
+    contactIDs?: ContactResponse[];
   };
 }

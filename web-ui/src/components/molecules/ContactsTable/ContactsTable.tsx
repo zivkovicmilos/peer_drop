@@ -57,7 +57,12 @@ const ContactsTable: FC<IContactsTableProps> = (props) => {
 
         return (
           <Box display={'flex'} alignItems={'center'}>
-            <IconButton onClick={() => handleEdit(id)}>
+            <IconButton
+              classes={{
+                root: 'iconButtonRoot'
+              }}
+              onClick={() => handleEdit(id)}
+            >
               <EditRoundedIcon
                 style={{
                   fill: 'black'
@@ -68,6 +73,9 @@ const ContactsTable: FC<IContactsTableProps> = (props) => {
             <IconButton
               style={{
                 marginLeft: '1rem'
+              }}
+              classes={{
+                root: 'iconButtonRoot'
               }}
               onClick={() => {
                 handleDelete({ id, name, publicKey });

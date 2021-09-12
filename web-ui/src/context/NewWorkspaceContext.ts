@@ -11,6 +11,12 @@ export interface INewWorkspaceContext {
   step: number;
   setStep: (newStep: number) => void;
 
+  sectionTitle: string;
+  setSectionTitle: (newTitle: string) => void;
+
+  workspaceMnemonic: string;
+  setWorkspaceMnemonic: (mnemonic: string) => void;
+
   workspaceName: string;
   workspaceType: ENewWorkspaceType;
   accessControl: INWAccessControlContacts | INWAccessControlPassword;
@@ -32,6 +38,12 @@ export interface INewWorkspaceContext {
 const NewWorkspaceContext = createContext<INewWorkspaceContext>({
   step: 0,
   setStep: (newStep: number) => {},
+
+  sectionTitle: null,
+  setSectionTitle: (newTitle) => {},
+
+  workspaceMnemonic: null,
+  setWorkspaceMnemonic: (mnemonic: string) => {},
 
   workspaceName: null,
   workspaceType: null,

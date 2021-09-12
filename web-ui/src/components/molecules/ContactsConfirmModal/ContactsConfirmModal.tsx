@@ -46,7 +46,12 @@ const ContactsConfirmModal: FC<IContactsConfirmModalProps> = (props) => {
             <Typography className={classes.modalTitle}>
               Are you sure?
             </Typography>
-            <IconButton onClick={() => handleConfirm(false)}>
+            <IconButton
+              classes={{
+                root: 'iconButtonRoot'
+              }}
+              onClick={() => handleConfirm(false)}
+            >
               <CloseRoundedIcon
                 style={{
                   width: '20px',

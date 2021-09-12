@@ -65,7 +65,7 @@ export const globalStyles = {
       fontWeight: 500,
       outline: 'none !important'
     },
-    '.MuiIconButton-root': {
+    '.iconButtonRoot': {
       padding: '3px'
     },
     textarea: {
