@@ -247,8 +247,6 @@ const SpecificContacts: FC<ISpecificContactsProps> = (props) => {
         </Typography>
       </Box>
       <Dialog
-        disableBackdropClick
-        disableEscapeKeyDown
         open={dialogOpen}
         onClose={() => handleDialogToggle(false)}
         classes={{ paper: classes.dialogPaper }}

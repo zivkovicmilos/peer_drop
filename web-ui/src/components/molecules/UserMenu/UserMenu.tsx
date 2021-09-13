@@ -17,6 +17,7 @@ import PowerSettingsNewRoundedIcon from '@material-ui/icons/PowerSettingsNewRoun
 import SwapHorizRoundedIcon from '@material-ui/icons/SwapHorizRounded';
 import React, { FC, useContext, useRef, useState } from 'react';
 import SessionContext from '../../../context/SessionContext';
+import SwapIdentities from '../SwapIdentities/SwapIdentities';
 import { IUserMenuProps } from './userMenu.types';
 
 const UserMenu: FC<IUserMenuProps> = () => {
@@ -40,6 +41,9 @@ const UserMenu: FC<IUserMenuProps> = () => {
 
     setOpen(false);
   };
+
+  const [switchIdentitiesOpen, setSwitchIdentitiesOpen] =
+    useState<boolean>(false);
 
   return (
     <div ref={anchorRef} className={classes.buttonWrapper}>
@@ -87,7 +91,13 @@ const UserMenu: FC<IUserMenuProps> = () => {
                     boxShadow: 'none'
                   }}
                 >
-                  <MenuItem className={classes.userMenuItem}>
+                  <MenuItem
+                    className={classes.userMenuItem}
+                    onClick={() => {
+                      setSwitchIdentitiesOpen(true);
+                      handleToggle();
+                    }}
+                  >
                     <Box display={'flex'}>
                       <SwapHorizRoundedIcon />
                       <Box ml={1}>Change identity</Box>
@@ -105,6 +115,10 @@ const UserMenu: FC<IUserMenuProps> = () => {
           </Grow>
         )}
       </Popper>
+      <SwapIdentities
+        modalOpen={switchIdentitiesOpen}
+        setModalOpen={setSwitchIdentitiesOpen}
+      />
     </div>
   );
 };
