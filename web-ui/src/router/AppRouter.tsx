@@ -9,6 +9,7 @@ import { EIdentityEditType } from '../components/pages/IdentityEdit/identityEdit
 import JoinWorkspace from '../components/pages/JoinWorkspace/JoinWorkspace';
 import NewWorkspace from '../components/pages/NewWorkspace/NewWorkspace';
 import Settings from '../components/pages/Settings/Settings';
+import ViewWorkspace from '../components/pages/ViewWorkspace/ViewWorkspace';
 import Workspaces from '../components/pages/Workspaces/Workspaces';
 
 const AppRouter = () => (
@@ -17,6 +18,11 @@ const AppRouter = () => (
       <Route path={'/workspaces'} exact={true} component={Workspaces} />
       <Route path={'/workspaces/new'} exact={true} component={NewWorkspace} />
       <Route path={'/workspaces/join'} exact={true} component={JoinWorkspace} />
+      <Route
+        path={'/workspaces/view/:workspaceId'}
+        exact={true}
+        component={ViewWorkspace}
+      />
 
       <Route path={'/contacts'} exact={true} component={Contacts} />
       <Route path={'/contacts/new'} exact={true}>

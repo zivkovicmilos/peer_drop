@@ -70,6 +70,17 @@ export const globalStyles = {
     },
     textarea: {
       fontSize: '0.875rem !important'
+    },
+    '.sectionTitle': {
+      fontFamily: 'Montserrat',
+      fontWeight: 'bold',
+      fontSize: '1.1rem',
+      color: 'black'
+    },
+    '.sectionDivider': {
+      height: '3px',
+      backgroundColor: 'black',
+      borderRadius: '15px'
     }
   }
 };

@@ -12,27 +12,35 @@ const WorkspaceList: FC<IWorkspaceListProps> = () => {
 
   const workspaceList = [
     {
+      id: '1',
       title: 'Polygon'
     },
     {
+      id: '2',
       title: 'ZP Projekat'
     },
     {
+      id: '3',
       title: 'KRIK'
     },
     {
+      id: '4',
       title: 'Al Jazeera'
     },
     {
+      id: '5',
       title: 'Work group'
     },
     {
+      id: '6',
       title: 'Example #1'
     },
     {
+      id: '7',
       title: 'Example #2'
     },
     {
+      id: '8',
       title: 'Example #3'
     }
   ];
@@ -52,6 +60,7 @@ const WorkspaceList: FC<IWorkspaceListProps> = () => {
           <SingleWorkspace
             key={`${workspace.title}-item-${index}`}
             title={workspace.title}
+            id={workspace.id}
           />
         );
       })}

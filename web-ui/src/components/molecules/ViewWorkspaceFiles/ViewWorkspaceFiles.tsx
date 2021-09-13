@@ -7,81 +7,73 @@ import {
   TableCell,
   TableContainer,
   TableHead,
-  TableRow
+  TableRow,
+  Typography
 } from '@material-ui/core';
 import { makeStyles } from '@material-ui/core/styles';
-import { GridCellParams, GridColDef } from '@material-ui/data-grid';
-import DeleteRoundedIcon from '@material-ui/icons/DeleteRounded';
-import EditRoundedIcon from '@material-ui/icons/EditRounded';
+import GetAppRoundedIcon from '@material-ui/icons/GetAppRounded';
 import clsx from 'clsx';
+import moment from 'moment';
 import { FC, useEffect } from 'react';
-import { useHistory } from 'react-router-dom';
+import FileIcon, { IconStyle } from 'react-fileicons';
+import folderIcon from '../../../shared/assets/img/folder.png';
+import ColorUtils from '../../../shared/utils/ColorUtils';
+import CommonUtils from '../../../shared/utils/CommonUtils';
 import theme from '../../../theme/theme';
 import LoadingIndicator from '../../atoms/LoadingIndicator/LoadingIndicator';
 import NoData from '../../atoms/NoData/NoData';
 import Pagination from '../../atoms/Pagination/Pagination';
 import usePagination from '../../atoms/Pagination/pagination.hook';
 import useSnackbar from '../Snackbar/useSnackbar.hook';
-import { IContactsTableProps } from './contactsTable.types';
+import {
+  FILE_TYPE,
+  IViewWorkspaceFilesProps
+} from './viewWorkspaceFiles.types';
 
-const ContactsTable: FC<IContactsTableProps> = (props) => {
-  const history = useHistory();
+const ViewWorkspaceFiles: FC<IViewWorkspaceFilesProps> = (props) => {
+  const { workspaceInfo } = props;
 
-  const { handleDelete } = props;
+  const dummyDate = new Date();
 
-  const handleEdit = (contactId: string | number) => {
-    history.push('/contacts/' + contactId + '/edit');
-  };
-
-  const rows = [
+  const files = [
     {
       id: '1',
-      name: 'Milos Zivkovic',
-      email: 'milos@zmilos.com',
-      publicKeyID: '4AEE18F83AFDEB23',
-      dateAdded: '21.01.2020.'
+      name: 'PoS Roadmap',
+      type: FILE_TYPE.FILE,
+      extension: 'doc',
+      modified: dummyDate,
+      size: 123123
     },
     {
       id: '2',
-      name: 'Milos Zivkovic',
-      email: 'milos@zmilos.com',
-      publicKeyID: '4AEE18F83AFDEB23',
-      dateAdded: '21.01.2020.'
+      name: 'IBFT Draft',
+      type: FILE_TYPE.FILE,
+      extension: 'pdf',
+      modified: dummyDate,
+      size: 123123
     },
     {
       id: '3',
-      name: 'Milos Zivkovic',
-      email: 'milos@zmilos.com',
-      publicKeyID: '4AEE18F83AFDEB23',
-      dateAdded: '21.01.2020.'
+      name: 'Onboarding',
+      type: FILE_TYPE.FOLDER,
+      modified: dummyDate,
+      size: 123123
     },
     {
       id: '4',
-      name: 'Milos Zivkovic',
-      email: 'milos@zmilos.com',
-      publicKeyID: '4AEE18F83AFDEB23',
-      dateAdded: '21.01.2020.'
+      name: 'Tasks',
+      type: FILE_TYPE.FILE,
+      extension: 'zip',
+      modified: dummyDate,
+      size: 123123
     },
     {
       id: '5',
-      name: 'Milos Zivkovic',
-      email: 'milos@zmilos.com',
-      publicKeyID: '4AEE18F83AFDEB23',
-      dateAdded: '21.01.2020.'
-    },
-    {
-      id: '6',
-      name: 'Milos Zivkovic',
-      email: 'milos@zmilos.com',
-      publicKeyID: '4AEE18F83AFDEB23',
-      dateAdded: '21.01.2020.'
-    },
-    {
-      id: '7',
-      name: 'Milos Zivkovic',
-      email: 'milos@zmilos.com',
-      publicKeyID: '4AEE18F83AFDEB23',
-      dateAdded: '21.01.2020.'
+      name: '.api-keys',
+      type: FILE_TYPE.FILE,
+      extension: '.api-keys',
+      modified: dummyDate,
+      size: 123123
     }
   ];
 
@@ -93,34 +85,20 @@ const ContactsTable: FC<IContactsTableProps> = (props) => {
 
   const classes = useStyles();
 
-  const renderActions = (id: string, name: string, publicKey: string) => {
+  const handleDownload = (id: string) => {};
+
+  const renderActions = (id: string) => {
     return (
       <Box display={'flex'} alignItems={'center'} justifyContent={'center'}>
         <IconButton
           classes={{
             root: 'iconButtonRoot'
           }}
-          onClick={() => handleEdit(id)}
-        >
-          <EditRoundedIcon
-            style={{
-              fill: 'black'
-            }}
-          />
-        </IconButton>
-
-        <IconButton
-          style={{
-            marginLeft: '1rem'
-          }}
-          classes={{
-            root: 'iconButtonRoot'
-          }}
           onClick={() => {
-            handleDelete({ id, name, publicKey });
+            handleDownload(id);
           }}
         >
-          <DeleteRoundedIcon
+          <GetAppRoundedIcon
             style={{
               fill: 'black'
             }}
@@ -131,12 +109,48 @@ const ContactsTable: FC<IContactsTableProps> = (props) => {
   };
 
   useEffect(() => {
-    setCount(rows.length);
+    setCount(files.length);
   }, []);
 
-  if (rows && count > 0) {
+  const renderIcon = (extension: string) => {
+    if (!extension) {
+      return (
+        <Box mr={2}>
+          <img src={folderIcon} className={classes.folderIcon} />
+        </Box>
+      );
+    }
+
+    const colorCode = ColorUtils.getColorCode(extension);
+
     return (
-      <Box display={'flex'} width={'100%'} flexDirection={'column'}>
+      <Box mr={2}>
+        <FileIcon
+          extension={extension}
+          background={'white'}
+          colorScheme={{ primary: colorCode.iconColor }}
+          iconStyle={IconStyle.normal}
+          size={35}
+        />
+      </Box>
+    );
+  };
+
+  const renderItemName = (
+    type: FILE_TYPE,
+    name: string,
+    extension?: string
+  ) => {
+    if (type == FILE_TYPE.FILE) {
+      return `${name}.${extension}`;
+    }
+
+    return name;
+  };
+
+  if (files && count > 0) {
+    return (
+      <Box display={'flex'} width={'80%'} flexDirection={'column'}>
         <TableContainer
           component={Paper}
           classes={{
@@ -156,19 +170,13 @@ const ContactsTable: FC<IContactsTableProps> = (props) => {
                   className={clsx(classes.tableHead, classes.noBorder)}
                   align="center"
                 >
-                  Email
+                  Modified
                 </TableCell>
                 <TableCell
                   className={clsx(classes.tableHead, classes.noBorder)}
                   align="center"
                 >
-                  Public Key ID
-                </TableCell>
-                <TableCell
-                  className={clsx(classes.tableHead, classes.noBorder)}
-                  align="center"
-                >
-                  Date Added
+                  Size
                 </TableCell>
                 <TableCell
                   className={clsx(classes.tableHead, classes.noBorder)}
@@ -179,37 +187,36 @@ const ContactsTable: FC<IContactsTableProps> = (props) => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {rows.map((row, index) => (
+              {files.map((row, index) => (
                 <TableRow key={`${row.name}-${index}`}>
                   <TableCell
                     className={clsx(classes.noBorder, classes.tableCell)}
                     align="center"
                   >
-                    {row.name}
+                    <Box display={'flex'} alignItems={'center'}>
+                      {renderIcon(row.extension)}
+                      <Typography className={classes.itemName}>
+                        {renderItemName(row.type, row.name, row.extension)}
+                      </Typography>
+                    </Box>
                   </TableCell>
                   <TableCell
                     className={clsx(classes.noBorder, classes.tableCell)}
                     align="center"
                   >
-                    {row.email}
+                    {moment(row.modified).format('DD.MM.YYYY.')}
                   </TableCell>
                   <TableCell
                     className={clsx(classes.noBorder, classes.tableCell)}
                     align="center"
                   >
-                    {row.publicKeyID}
+                    {CommonUtils.formatBytes(row.size)}
                   </TableCell>
                   <TableCell
                     className={clsx(classes.noBorder, classes.tableCell)}
                     align="center"
                   >
-                    {row.dateAdded}
-                  </TableCell>
-                  <TableCell
-                    className={clsx(classes.noBorder, classes.tableCell)}
-                    align="center"
-                  >
-                    {renderActions(row.id, row.name, row.publicKeyID)}
+                    {renderActions(row.id)}
                   </TableCell>
                 </TableRow>
               ))}
@@ -241,6 +248,10 @@ const ContactsTable: FC<IContactsTableProps> = (props) => {
 const useStyles = makeStyles(() => {
   return {
     table: {},
+    itemName: {
+      fontSize: '0.875rem',
+      fontWeight: 500
+    },
     tableHead: {
       fontWeight: 600
     },
@@ -251,7 +262,11 @@ const useStyles = makeStyles(() => {
       boxShadow: 'none !important'
     },
     noBorder: {
-      border: 'none'
+      borderBottom: '3px solid #F6F6F6'
+    },
+    folderIcon: {
+      width: '35px',
+      height: 'auto'
     },
     tableCell: {
       fontWeight: 500
@@ -259,4 +274,4 @@ const useStyles = makeStyles(() => {
   };
 });
 
-export default ContactsTable;
+export default ViewWorkspaceFiles;

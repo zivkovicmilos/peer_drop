@@ -1,13 +1,14 @@
 import { Box, Typography } from '@material-ui/core';
 import { makeStyles } from '@material-ui/core/styles';
 import React, { FC, useEffect, useState } from 'react';
+import { useHistory } from 'react-router-dom';
 import greenCircle from '../../../shared/assets/img/workspace_green.png';
 import redCircle from '../../../shared/assets/img/workspace_red.png';
 import theme from '../../../theme/theme';
 import { ISingleWorkspaceProps } from './singleWorkspace.types';
 
 const SingleWorkspace: FC<ISingleWorkspaceProps> = (props) => {
-  const { title } = props;
+  const { title, id } = props;
 
   const classes = useStyles();
 
@@ -79,12 +80,18 @@ const SingleWorkspace: FC<ISingleWorkspaceProps> = (props) => {
     return Math.floor(Math.random() * (max - min + 1)) + min;
   };
 
+  const history = useHistory();
+  const handleWorkspaceClick = () => {
+    history.push('/workspaces/view/' + id);
+  };
+
   return (
     <Box
       className={classes.workspaceItemWrapper}
       style={{
         background: background
       }}
+      onClick={handleWorkspaceClick}
     >
       <Box ml={'auto'} display={'flex'} alignItems={'center'}>
         <Typography className={classes.workspaceInfo}>
