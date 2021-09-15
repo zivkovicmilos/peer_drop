@@ -36,31 +36,37 @@ var (
 )
 
 type StorageHandler struct {
-	logger hclog.Logger
-	db     *leveldb.DB
+	logger       hclog.Logger
+	db           *leveldb.DB
+	closeChannel chan struct{}
 }
-
-//// NewStorageHandler instantiates a new storage instance and handler at the specified path
-//func NewStorageHandler(directory string, logger hclog.Logger) (*StorageHandler, error) {
-//	db, err := leveldb.OpenFile(directory, nil)
-//	if err != nil {
-//		return nil, err
-//	}
-//
-//	return &StorageHandler{
-//		logger: logger.Named("storage"),
-//		db:     db,
-//	}, nil
-//}
 
 // SetLogger sets the storage handler's logger
 func (sh *StorageHandler) SetLogger(logger hclog.Logger) {
-	GetStorageHandler().logger = logger
+	GetStorageHandler().logger = logger.Named("storage-handler")
+}
+
+// SetCloseChannel sets the Storage Handler's close channel
+func (sh *StorageHandler) SetCloseChannel(closeChannel chan struct{}) {
+	sh.closeChannel = closeChannel
+
+	// Set the listener
+	go func() {
+		<-closeChannel
+
+		sh.logger.Info("Caught stop signal...")
+		closeErr := sh.Close()
+		if closeErr != nil {
+			sh.logger.Info("Storage interface unable to stop gracefully")
+		} else {
+			sh.logger.Info("Storage interface stopped gracefully")
+		}
+	}()
 }
 
 // OpenDB sets the storage handler's logger
 func (sh *StorageHandler) OpenDB(directory string) error {
-	db, err := leveldb.OpenFile(directory, nil)
+	db, err := leveldb.OpenFile(directory, nil) // TODO check of if exists
 	if err != nil {
 		return err
 	}

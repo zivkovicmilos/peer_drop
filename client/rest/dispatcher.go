@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -50,7 +49,7 @@ func (d *Dispatcher) commonMiddleware(next http.Handler) http.Handler {
 }
 
 // Start starts the http dispatcher service
-func (d *Dispatcher) Start(closeChannel <-chan os.Signal) {
+func (d *Dispatcher) Start(closeChannel chan struct{}) {
 	// Set up the router and server
 	d.setupRouter()
 
