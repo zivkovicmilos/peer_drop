@@ -10,12 +10,13 @@ import {
   TableRow
 } from '@material-ui/core';
 import { makeStyles } from '@material-ui/core/styles';
-import { GridCellParams, GridColDef } from '@material-ui/data-grid';
 import DeleteRoundedIcon from '@material-ui/icons/DeleteRounded';
 import EditRoundedIcon from '@material-ui/icons/EditRounded';
 import clsx from 'clsx';
-import { FC, useEffect } from 'react';
+import { FC, useEffect, useState } from 'react';
 import { useHistory } from 'react-router-dom';
+import ContactsService from '../../../services/contacts/contactsService';
+import { IContactResponse } from '../../../services/contacts/contactsService.types';
 import theme from '../../../theme/theme';
 import LoadingIndicator from '../../atoms/LoadingIndicator/LoadingIndicator';
 import NoData from '../../atoms/NoData/NoData';
@@ -32,6 +33,8 @@ const ContactsTable: FC<IContactsTableProps> = (props) => {
   const handleEdit = (contactId: string | number) => {
     history.push('/contacts/' + contactId + '/edit');
   };
+
+  const [contacts, setContacts] = useState<{ data: IContactResponse[] }>(null);
 
   const rows = [
     {
@@ -131,10 +134,24 @@ const ContactsTable: FC<IContactsTableProps> = (props) => {
   };
 
   useEffect(() => {
-    setCount(rows.length);
-  }, []);
+    const fetchContacts = async () => {
+      return await ContactsService.getContacts({ page, limit });
+    };
 
-  if (rows && count > 0) {
+    fetchContacts()
+      .then((contactsResponse) => {
+        setCount(contactsResponse.count);
+        setContacts({ data: contactsResponse.data });
+      })
+      .catch((err) => {
+        setCount(0);
+
+        openSnackbar('Unable to fetch contacts', 'error');
+      });
+    setCount(rows.length);
+  }, [page]);
+
+  if (contacts && count > 0) {
     return (
       <Box display={'flex'} width={'100%'} flexDirection={'column'}>
         <TableContainer
@@ -179,7 +196,7 @@ const ContactsTable: FC<IContactsTableProps> = (props) => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {rows.map((row, index) => (
+              {contacts.data.map((row, index) => (
                 <TableRow key={`${row.name}-${index}`}>
                   <TableCell
                     className={clsx(classes.noBorder, classes.tableCell)}

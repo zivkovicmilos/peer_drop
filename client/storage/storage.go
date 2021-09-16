@@ -8,6 +8,7 @@ import (
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/util"
 	"github.com/zivkovicmilos/peer_drop/rest/types"
+	"github.com/zivkovicmilos/peer_drop/rest/utils"
 )
 
 // Data organization
@@ -128,6 +129,49 @@ func (sh *StorageHandler) GetContact(id string) (*types.Contact, error) {
 	err := iter.Error()
 
 	return foundContact, err
+}
+
+// GetContacts fetches all contacts
+func (sh *StorageHandler) GetContacts(paginationLimits utils.PaginationLimits) ([]*types.Contact, int, error) {
+	var foundContacts []*types.Contact
+
+	keyBase := append(CONTACTS, delimiter...)
+	iter := sh.db.NewIterator(util.BytesPrefix(keyBase), nil)
+	var currentContact *types.Contact
+	for iter.Next() {
+		// tableName:id:attributeName => value
+		keyParts := strings.Split(string(iter.Key()), ":")
+
+		if currentContact == nil || (currentContact != nil && currentContact.ID != keyParts[1]) {
+			foundContact, findErr := sh.GetContact(keyParts[1])
+			if findErr != nil {
+				return nil, 0, findErr
+			}
+
+			foundContacts = append(foundContacts, foundContact)
+			currentContact = foundContact
+		}
+	}
+
+	iter.Release()
+	err := iter.Error()
+
+	totalContacts := len(foundContacts)
+
+	if paginationLimits != utils.NoPagination && totalContacts != 0 {
+		offset := (paginationLimits.Page - 1) * paginationLimits.Limit
+
+		upperBound := offset + paginationLimits.Limit
+		if upperBound > totalContacts {
+			upperBound = totalContacts
+		}
+
+		foundContacts = foundContacts[offset:upperBound]
+	} else {
+		foundContacts = []*types.Contact{}
+	}
+
+	return foundContacts, totalContacts, err
 }
 
 // CreateContact stores the contact into the DB

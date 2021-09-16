@@ -10,4 +10,8 @@ export default class CommonUtils {
 
     return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
   }
+
+  static removeLineBreaks(originalString: string): string {
+    return originalString.replace(/(\r)/gm, '');
+  }
 }

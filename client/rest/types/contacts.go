@@ -8,3 +8,8 @@ type Contact struct {
 	PublicKeyID string `json:"publicKeyID"`
 	PublicKey   string `json:"publicKey"`
 }
+
+type ContactsResponse struct {
+	Data  []*Contact `json:"data"`
+	Count int        `json:"count"`
+}

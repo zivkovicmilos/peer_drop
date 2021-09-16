@@ -3,7 +3,9 @@ import ArrowBackRoundedIcon from '@material-ui/icons/ArrowBackRounded';
 import SaveRoundedIcon from '@material-ui/icons/SaveRounded';
 import { useFormik } from 'formik';
 import { FC, useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useHistory, useParams } from 'react-router-dom';
+import ContactsService from '../../../services/contacts/contactsService';
+import { INewContactRequest } from '../../../services/contacts/contactsService.types';
 import newContactValidationSchema from '../../../shared/schemas/contactSchemas';
 import theme from '../../../theme/theme';
 import ActionButton from '../../atoms/ActionButton/ActionButton';
@@ -12,7 +14,10 @@ import Link from '../../atoms/Link/Link';
 import PageTitle from '../../atoms/PageTitle/PageTitle';
 import useSnackbar from '../../molecules/Snackbar/useSnackbar.hook';
 import KeyManager from '../../organisms/KeyManager/KeyManager';
-import { EKeyInputType } from '../../organisms/KeyManager/keyManager.types';
+import {
+  EKeyInputType,
+  EKeyType
+} from '../../organisms/KeyManager/keyManager.types';
 import {
   EContactEditType,
   IContactEditParams,
@@ -45,13 +50,36 @@ const ContactEdit: FC<IContactEditProps> = (props) => {
     validationSchema: newContactValidationSchema,
     onSubmit: (values, { resetForm }) => {
       setErrorMessage('');
-
+      console.log(values);
       if (values.keyPair == null) {
         setErrorMessage('A key pair is required');
         return;
       }
+
+      // Create the contact
+      if (type == EContactEditType.NEW) {
+        handleNewContact({
+          name: values.name,
+          publicKey: values.keyPair.publicKey
+        }).catch((err) => {
+          resetForm();
+
+          openSnackbar('Unable to create new contact', 'error');
+        });
+      } else {
+        // TODO
+      }
     }
   });
+
+  const history = useHistory();
+
+  const handleNewContact = async (newContactRequest: INewContactRequest) => {
+    await ContactsService.createContact(newContactRequest);
+
+    history.push('/contacts');
+    openSnackbar('Contact successfully created!', 'success');
+  };
 
   useEffect(() => {
     if (type === EContactEditType.EDIT) {
@@ -119,10 +147,12 @@ const ContactEdit: FC<IContactEditProps> = (props) => {
             <KeyManager
               addedKey={addedKey}
               setAddedKey={setAddedKey}
+              formik={formik}
+              expectedType={EKeyType.PUBLIC}
               visibleTypes={[EKeyInputType.IMPORT, EKeyInputType.ENTER]}
             />
           </Box>
-          <Box display={errorMessage ? 'flex' : 'none'}>
+          <Box display={errorMessage ? 'flex' : 'none'} mt={4}>
             <Typography
               variant={'body1'}
               style={{

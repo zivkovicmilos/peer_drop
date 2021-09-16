@@ -1,10 +1,8 @@
 import {
   IconButton,
   Snackbar as MUISnackbar,
-  Theme,
   Typography
 } from '@material-ui/core';
-import { makeStyles } from '@material-ui/core/styles';
 import { Close } from '@material-ui/icons';
 import { Alert } from '@material-ui/lab';
 import React, { FC } from 'react';
@@ -12,8 +10,6 @@ import { SnackbarConsumer } from './snackbar.context';
 import { ISnackbarContext, ISnackbarProps } from './snackbar.types';
 
 const Snackbar: FC = () => {
-  const classes = useStyles();
-
   const handleClose =
     (
       key: ISnackbarProps['key'],
@@ -32,12 +28,9 @@ const Snackbar: FC = () => {
       {({ snackbars, closeSnackbar }) =>
         snackbars.map((snackbar) => (
           <MUISnackbar
-            classes={{
-              root: classes.snackbarRoot
-            }}
             anchorOrigin={{
               vertical: 'bottom',
-              horizontal: 'left'
+              horizontal: 'right'
             }}
             open={snackbar.isOpen}
             autoHideDuration={6000}
@@ -68,16 +61,5 @@ const Snackbar: FC = () => {
     </SnackbarConsumer>
   );
 };
-
-const useStyles = makeStyles((theme: Theme) => {
-  const { spacing } = theme;
-
-  return {
-    snackbarRoot: {
-      position: 'relative',
-      marginTop: spacing(1.5)
-    }
-  };
-});
 
 export default Snackbar;

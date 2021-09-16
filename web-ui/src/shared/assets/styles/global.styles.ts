@@ -81,6 +81,9 @@ export const globalStyles = {
       height: '3px',
       backgroundColor: 'black',
       borderRadius: '15px'
+    },
+    '.MuiTypography-body1': {
+      fontFamily: 'Montserrat'
     }
   }
 };

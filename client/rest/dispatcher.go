@@ -9,7 +9,9 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/hashicorp/go-hclog"
+	"github.com/rs/cors"
 	"github.com/zivkovicmilos/peer_drop/rest/contacts"
+	"github.com/zivkovicmilos/peer_drop/rest/crypto"
 	"github.com/zivkovicmilos/peer_drop/storage"
 )
 
@@ -41,8 +43,14 @@ func (d *Dispatcher) GetStorageHandler() *storage.StorageHandler {
 // commonMiddleware defines a middleware that all requests go through
 func (d *Dispatcher) commonMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Add("Content-Type", "application/json")
+		//d.setupHeader(w, r)
+		w.Header().Set("Content-Type", "application/json")
+
 		d.logger.Info(fmt.Sprintf("%s %s", r.Method, r.URL))
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 
 		next.ServeHTTP(w, r)
 	})
@@ -51,13 +59,21 @@ func (d *Dispatcher) commonMiddleware(next http.Handler) http.Handler {
 // Start starts the http dispatcher service
 func (d *Dispatcher) Start(closeChannel chan struct{}) {
 	// Set up the router and server
-	d.setupRouter()
+	//d.setupRouter()
+	d.router = mux.NewRouter()
 
 	// Set up the middleware
 	d.router.Use(d.commonMiddleware)
 
 	// Register the available endpoints
 	d.registerEndpoints()
+
+	corsConfig := cors.New(cors.Options{
+		AllowedOrigins: []string{"http://localhost:3000"},
+		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+	})
+
+	d.setupServer(corsConfig.Handler(d.router))
 
 	// Start the handle loop
 	go func() {
@@ -85,16 +101,14 @@ func (d *Dispatcher) Start(closeChannel chan struct{}) {
 	d.logger.Info("HTTP server stopped gracefully")
 }
 
-// setupRouter is a helper method for creating the mux router and http server
-func (d *Dispatcher) setupRouter() {
-	d.router = mux.NewRouter()
-	// Add your routes as needed
+// setupServer is a helper method for creating the http server
+func (d *Dispatcher) setupServer(handler http.Handler) {
 
 	d.server = &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", serverHost, serverPort),
 		WriteTimeout: time.Second * 15,
 		ReadTimeout:  time.Second * 15,
-		Handler:      d.router,
+		Handler:      handler,
 	}
 }
 
@@ -106,11 +120,24 @@ func NotFoundHandler(w http.ResponseWriter, r *http.Request) {
 // registerEndpoints registers all available REST endpoints
 func (d *Dispatcher) registerEndpoints() {
 	// Contacts
-	d.router.HandleFunc("/contacts", contacts.GetContacts).Methods("GET")
-	d.router.HandleFunc("/contacts", contacts.CreateContact).Methods("POST")
-	d.router.HandleFunc("/contacts/{contactId}", contacts.GetContact).Methods("GET")
-	d.router.HandleFunc("/contacts/{contactId}", contacts.UpdateContact).Methods("PUT")
-	d.router.HandleFunc("/contacts/{contactId}", contacts.DeleteContact).Methods("DELETE")
+	d.router.HandleFunc("/api/contacts", contacts.GetContacts).Methods("GET")
+	d.router.HandleFunc("/api/contacts", contacts.CreateContact).Methods("POST")
+	d.router.HandleFunc("/api/contacts/{contactId}", contacts.GetContact).Methods("GET")
+	d.router.HandleFunc("/api/contacts/{contactId}", contacts.UpdateContact).Methods("PUT")
+	d.router.HandleFunc("/api/contacts/{contactId}", contacts.DeleteContact).Methods("DELETE")
+
+	// Crypto
+	d.router.HandleFunc("/api/crypto/validate-public-key", crypto.ValidatePublicKey).Methods("POST")
 
 	d.router.NotFoundHandler = http.HandlerFunc(NotFoundHandler)
+
+	http.Handle("/", d.router)
+}
+
+// setupHeaders sets up the base CORS config
+func (d *Dispatcher) setupHeader(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+	w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding")
 }

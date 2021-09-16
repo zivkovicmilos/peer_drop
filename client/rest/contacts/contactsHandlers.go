@@ -3,20 +3,39 @@ package contacts
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/zivkovicmilos/peer_drop/crypto"
 	"github.com/zivkovicmilos/peer_drop/rest/types"
+	"github.com/zivkovicmilos/peer_drop/rest/utils"
 	"github.com/zivkovicmilos/peer_drop/storage"
 )
 
-type ContactsHandler struct {
-}
+var (
+	dateFormat = "02.01.2006."
+)
 
 // GetContacts fetches all the contacts
 func GetContacts(w http.ResponseWriter, r *http.Request) {
+	limit := r.URL.Query().Get("limit")
+	page := r.URL.Query().Get("page")
+	paginationLimits := utils.ParsePagination(limit, page)
 
+	contacts, totalContacts, contactsError := storage.GetStorageHandler().GetContacts(paginationLimits)
+	if contactsError != nil {
+		http.Error(w, "Unable to fetch contacts", http.StatusInternalServerError)
+		return
+	}
+
+	encodeErr := json.NewEncoder(w).Encode(types.ContactsResponse{
+		Data:  contacts,
+		Count: totalContacts,
+	})
+	if encodeErr != nil {
+		http.Error(w, "Unable to encode response", http.StatusInternalServerError)
+	}
 }
 
 // GetContact fetches a single contact
@@ -62,8 +81,16 @@ func CreateContact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	email, emailError := crypto.GetEmailFromPublicKey(contact.PublicKey)
+	if emailError != nil {
+		http.Error(w, "Invalid public key", http.StatusBadRequest)
+		return
+	}
+
 	contact.ID = uuid.New().String()
-	contact.PublicKeyID = crypto.GetKeyID(publicKey.N.Bytes())
+	contact.PublicKeyID = publicKey.KeyIdString()
+	contact.Email = email
+	contact.DateAdded = time.Now().Format(dateFormat)
 
 	storageHandler := storage.GetStorageHandler()
 	createError := storageHandler.CreateContact(contact)

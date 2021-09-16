@@ -9,18 +9,23 @@ import {
 import { makeStyles } from '@material-ui/core/styles';
 import BackupRoundedIcon from '@material-ui/icons/BackupRounded';
 import { Formik } from 'formik';
-import { FC, Fragment, useMemo, useState } from 'react';
+import { FC, Fragment, useCallback, useMemo, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
+import CryptoService from '../../../services/crypto/cryptoService';
+import { IValidatePublicKeyResponse } from '../../../services/crypto/cryptoService.types';
 import generateKeyValidationSchema from '../../../shared/schemas/identitySchemas';
+import CommonUtils from '../../../shared/utils/CommonUtils';
 import theme from '../../../theme/theme';
 import ActionButton from '../../atoms/ActionButton/ActionButton';
 import FormTitle from '../../atoms/FormTitle/FormTitle';
 import KeyList from '../../atoms/KeyList/KeyList';
 import IdentityOverwriteModal from '../../molecules/IdentityOverwriteModal/IdentityOverwriteModal';
+import useSnackbar from '../../molecules/Snackbar/useSnackbar.hook';
 import { IKeyPair } from '../../pages/ContactEdit/contactEdit.types';
 import {
   EKeyGenerateType,
   EKeyInputType,
+  EKeyType,
   IKeyManagerProps
 } from './keyManager.types';
 
@@ -36,7 +41,13 @@ const KeyManager: FC<IKeyManagerProps> = (props) => {
 
   const classes = useStyles();
 
-  const { addedKey, setAddedKey, keyListTitle = 'Added key', formik } = props;
+  const {
+    addedKey,
+    setAddedKey,
+    keyListTitle = 'Added key',
+    formik,
+    expectedType
+  } = props;
 
   const dropzoneStyle = {
     display: 'flex',
@@ -55,13 +66,48 @@ const KeyManager: FC<IKeyManagerProps> = (props) => {
     transition: 'border .24s ease-in-out'
   };
 
+  const { openSnackbar } = useSnackbar();
+
+  const parseKey = async (key: string) => {
+    try {
+      if (expectedType == EKeyType.PUBLIC) {
+        let response: IValidatePublicKeyResponse =
+          await CryptoService.validatePublicKey(key);
+
+        await updateKey({
+          keyID: response.publicKeyID,
+          publicKey: key,
+          privateKey: ''
+        });
+      } else {
+        // TODO
+      }
+
+      openSnackbar('Key successfully added', 'success');
+    } catch (error) {
+      openSnackbar('Unable to add key', 'error');
+    }
+  };
+
+  const onDrop = useCallback((acceptedFiles) => {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const text = e.target.result;
+      const preparedKey: string = CommonUtils.removeLineBreaks(text as string);
+
+      await parseKey(preparedKey);
+    };
+
+    reader.readAsText(acceptedFiles[0]);
+  }, []);
+
   const {
     getRootProps,
     getInputProps,
     isDragActive,
     isDragAccept,
     isDragReject
-  } = useDropzone({ accept: 'image/*' });
+  } = useDropzone({ onDrop, accept: '.asc, .gpg, .pgp', maxFiles: 1 });
 
   const style = useMemo(
     () => ({
@@ -69,6 +115,8 @@ const KeyManager: FC<IKeyManagerProps> = (props) => {
     }),
     [isDragActive, isDragReject, isDragAccept]
   );
+
+  const [keyInputValue, setKeyInputValue] = useState<string>('');
 
   const handleTypeSelect = (type: EKeyInputType) => {
     setActiveTab(type);
@@ -80,12 +128,11 @@ const KeyManager: FC<IKeyManagerProps> = (props) => {
 
   const { visibleTypes } = props;
 
-  const handleKeyRemove = (key: IKeyPair) => {
+  const handleKeyRemove = () => {
     setAddedKey(null);
     setBufferKeyPair(null);
+    setKeyInputValue('');
   };
-
-  // TODO add restriction for singleKey
 
   const validKeyTypes = [EKeyGenerateType.RSA_2048, EKeyGenerateType.RSA_4096];
 
@@ -104,7 +151,7 @@ const KeyManager: FC<IKeyManagerProps> = (props) => {
     '37sJ5QsW+sJyoNde3xH8vdXhzU7eT82D6X/scw9RZz+/6rCJ4p0=\n' +
     '-----END RSA PRIVATE KEY-----';
 
-  const handleGenerateKey = () => {
+  const handleGenerateKey = async () => {
     let keyPair = {
       keyID: '4AEE18F83AFDEB23',
       publicKey: '4AEE18F83AFDEB23',
@@ -116,34 +163,40 @@ const KeyManager: FC<IKeyManagerProps> = (props) => {
     if (addedKey != null) {
       setConfirmOpen(true);
     } else {
-      updateKey(keyPair);
+      await updateKey(keyPair);
     }
   };
 
   // Overwrite modal
-  const handleConfirm = (confirmed: boolean) => {
+  const handleConfirm = async (confirmed: boolean) => {
     console.log(confirmed);
     if (confirmed) {
       console.log('Overwriting');
-      updateKey(bufferKeyPair);
+      await updateKey(bufferKeyPair);
     }
 
     setBufferKeyPair(null);
     setConfirmOpen(false);
   };
 
-  const updateKey = (keyPair: IKeyPair) => {
-    // TODO implement
-    setGeneratedKey(dummyPK);
+  const updateKey = async (keyPair: IKeyPair) => {
+    setGeneratedKey(dummyPK); // TODO swap out
     setAddedKey(keyPair);
 
-    formik.values.keyPair = keyPair;
+    await formik.setFieldValue('keyPair', keyPair);
+    console.log(formik.values.keyPair);
   };
 
   const [confirmOpen, setConfirmOpen] = useState<boolean>(false);
 
   // Used for state management in overwriting
   const [bufferKeyPair, setBufferKeyPair] = useState<IKeyPair>(null);
+  const handleKeyInput = async (event: any) => {
+    setKeyInputValue(event.target.value);
+
+    // Trigger validation and addition
+    await parseKey(event.target.value);
+  };
 
   return (
     <Box display={'flex'} flexDirection={'column'} width={'100%'}>
@@ -217,9 +270,6 @@ const KeyManager: FC<IKeyManagerProps> = (props) => {
         {activeTab === EKeyInputType.ENTER && (
           <Fragment>
             <Box className={classes.textInputWrapper}>
-              {
-                // TODO add on input change listener
-              }
               <TextField
                 variant={'outlined'}
                 rows={10}
@@ -235,6 +285,11 @@ const KeyManager: FC<IKeyManagerProps> = (props) => {
                   '...\n\n' +
                   '-----END PGP PUBLIC KEY BLOCK-----'
                 }
+                onChange={handleKeyInput}
+                onKeyUp={handleKeyInput}
+                onPaste={handleKeyInput}
+                onInput={handleKeyInput}
+                value={keyInputValue}
               />
             </Box>
 
@@ -348,7 +403,7 @@ const KeyManager: FC<IKeyManagerProps> = (props) => {
                         <KeyList
                           addedKey={addedKey}
                           handleKeyRemove={() => {
-                            handleKeyRemove(addedKey);
+                            handleKeyRemove();
                             setGeneratedKey('');
                             formik.values.keyPair = null;
                           }}

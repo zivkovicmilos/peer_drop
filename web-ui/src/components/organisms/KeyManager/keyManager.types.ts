@@ -7,6 +7,8 @@ export interface IKeyManagerProps {
   addedKey: IKeyPair;
   keyListTitle?: string;
   formik?: any;
+
+  expectedType: EKeyType;
 }
 
 export enum EKeyInputType {
@@ -18,4 +20,9 @@ export enum EKeyInputType {
 export enum EKeyGenerateType {
   RSA_2048 = 'RSA-2048',
   RSA_4096 = 'RSA-4096'
+}
+
+export enum EKeyType {
+  PUBLIC,
+  PRIVATE
 }

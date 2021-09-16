@@ -20,7 +20,10 @@ import Link from '../../atoms/Link/Link';
 import PageTitle from '../../atoms/PageTitle/PageTitle';
 import useSnackbar from '../../molecules/Snackbar/useSnackbar.hook';
 import KeyManager from '../../organisms/KeyManager/KeyManager';
-import { EKeyInputType } from '../../organisms/KeyManager/keyManager.types';
+import {
+  EKeyInputType,
+  EKeyType
+} from '../../organisms/KeyManager/keyManager.types';
 import { IKeyPair } from '../ContactEdit/contactEdit.types';
 
 import {
@@ -147,6 +150,7 @@ const IdentityEdit: FC<IIdentityEditProps> = (props) => {
                 </Box>
                 <KeyManager
                   addedKey={addedKey}
+                  expectedType={EKeyType.PRIVATE}
                   keyListTitle={
                     type == EIdentityEditType.EDIT
                       ? 'Existing pair'

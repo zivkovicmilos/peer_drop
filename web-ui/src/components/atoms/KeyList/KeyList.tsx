@@ -38,7 +38,7 @@ const KeyList: FC<IKeyListProps> = (props) => {
               classes={{
                 root: 'iconButtonRoot'
               }}
-              onClick={() => handleKeyRemove(addedKey)}
+              onClick={handleKeyRemove}
             >
               <CloseRoundedIcon
                 style={{
