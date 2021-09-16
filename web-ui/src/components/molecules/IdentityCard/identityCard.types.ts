@@ -1,10 +1,7 @@
-import { IIdentity } from '../../pages/Identities/identities.types';
+import { IIdentityResponse } from '../../../services/identities/identitiesService.types';
 
-export interface IIdentityCardProps
-  extends Pick<
-    IIdentity,
-    'picture' | 'name' | 'publicKeyID' | 'numWorkspaces' | 'creationDate'
-  > {}
+export interface IIdentityCardProps extends IIdentityResponse {
+}
 
 export enum EIdentityCardMenuItem {
   EDIT = 'Edit',

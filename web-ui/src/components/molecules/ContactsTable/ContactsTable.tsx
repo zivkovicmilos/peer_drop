@@ -28,65 +28,13 @@ import { IContactsTableProps } from './contactsTable.types';
 const ContactsTable: FC<IContactsTableProps> = (props) => {
   const history = useHistory();
 
-  const { handleDelete } = props;
+  const { handleDelete, fetchTrigger } = props;
 
   const handleEdit = (contactId: string | number) => {
     history.push('/contacts/' + contactId + '/edit');
   };
 
   const [contacts, setContacts] = useState<{ data: IContactResponse[] }>(null);
-
-  const rows = [
-    {
-      id: '1',
-      name: 'Milos Zivkovic',
-      email: 'milos@zmilos.com',
-      publicKeyID: '4AEE18F83AFDEB23',
-      dateAdded: '21.01.2020.'
-    },
-    {
-      id: '2',
-      name: 'Milos Zivkovic',
-      email: 'milos@zmilos.com',
-      publicKeyID: '4AEE18F83AFDEB23',
-      dateAdded: '21.01.2020.'
-    },
-    {
-      id: '3',
-      name: 'Milos Zivkovic',
-      email: 'milos@zmilos.com',
-      publicKeyID: '4AEE18F83AFDEB23',
-      dateAdded: '21.01.2020.'
-    },
-    {
-      id: '4',
-      name: 'Milos Zivkovic',
-      email: 'milos@zmilos.com',
-      publicKeyID: '4AEE18F83AFDEB23',
-      dateAdded: '21.01.2020.'
-    },
-    {
-      id: '5',
-      name: 'Milos Zivkovic',
-      email: 'milos@zmilos.com',
-      publicKeyID: '4AEE18F83AFDEB23',
-      dateAdded: '21.01.2020.'
-    },
-    {
-      id: '6',
-      name: 'Milos Zivkovic',
-      email: 'milos@zmilos.com',
-      publicKeyID: '4AEE18F83AFDEB23',
-      dateAdded: '21.01.2020.'
-    },
-    {
-      id: '7',
-      name: 'Milos Zivkovic',
-      email: 'milos@zmilos.com',
-      publicKeyID: '4AEE18F83AFDEB23',
-      dateAdded: '21.01.2020.'
-    }
-  ];
 
   const { page, count, setCount, limit, handlePageChange } = usePagination({
     limit: 8
@@ -148,8 +96,7 @@ const ContactsTable: FC<IContactsTableProps> = (props) => {
 
         openSnackbar('Unable to fetch contacts', 'error');
       });
-    setCount(rows.length);
-  }, [page]);
+  }, [page, fetchTrigger]);
 
   if (contacts && count > 0) {
     return (

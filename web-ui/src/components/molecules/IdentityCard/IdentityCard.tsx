@@ -23,7 +23,15 @@ import {
 } from './identityCard.types';
 
 const IdentityCard: FC<IIdentityCardProps> = (props) => {
-  const { picture, name, publicKeyID, numWorkspaces, creationDate } = props;
+  const {
+    picture,
+    name,
+    publicKeyID,
+    numWorkspaces,
+    dateCreated,
+    id,
+    isPrimary
+  } = props;
 
   const { userIdentity } = useContext(SessionContext);
 
@@ -87,7 +95,7 @@ const IdentityCard: FC<IIdentityCardProps> = (props) => {
             </Typography>
           </Box>
 
-          {userIdentity.keyID == publicKeyID && (
+          {isPrimary && (
             <Box ml={0.5}>
               <CurrentIdentity
                 style={{
@@ -173,7 +181,7 @@ const IdentityCard: FC<IIdentityCardProps> = (props) => {
           />
           <Box ml={1} className={'truncate'} width={'100%'} maxWidth={'160px'}>
             <Typography className={clsx(classes.identitySubtext, 'truncate')}>
-              {creationDate}
+              {dateCreated}
             </Typography>
           </Box>
         </Box>
@@ -182,11 +190,12 @@ const IdentityCard: FC<IIdentityCardProps> = (props) => {
           open={Boolean(anchorEl)}
           onClose={handleClose}
         >
-          {menuItems.map((menuItem) => {
+          {menuItems.map((menuItem, index) => {
             return (
               <MenuItem
+                key={`menuItem-${index}`}
                 onClick={() => {
-                  menuItem.onClick(publicKeyID);
+                  menuItem.onClick(id);
                   handleClose();
                 }}
                 className={classes.identityMenuItem}

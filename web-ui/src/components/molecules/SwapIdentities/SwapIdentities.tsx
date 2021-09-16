@@ -14,7 +14,8 @@ import { makeStyles } from '@material-ui/core/styles';
 import CloseRoundedIcon from '@material-ui/icons/CloseRounded';
 import { FC, useContext, useEffect, useState } from 'react';
 import SessionContext from '../../../context/SessionContext';
-import { IUserIdentity } from '../../../context/sessionContext.types';
+import IdentitiesService from '../../../services/identities/identitiesService';
+import { IIdentityResponse } from '../../../services/identities/identitiesService.types';
 import LoadingIndicator from '../../atoms/LoadingIndicator/LoadingIndicator';
 import useSnackbar from '../Snackbar/useSnackbar.hook';
 import { ISwapIdentitiesProps } from './swapIdentities.types';
@@ -26,68 +27,22 @@ const SwapIdentities: FC<ISwapIdentitiesProps> = (props) => {
 
   const [loading, setLoading] = useState<boolean>(true);
   const [allIdentities, setAllidentities] = useState<
-    { list: IUserIdentity[] } | undefined
+    { list: IIdentityResponse[] } | undefined
   >();
 
   const { openSnackbar } = useSnackbar();
 
   useEffect(() => {
     if (modalOpen) {
-      const fetchAllContacts = async () => {
-        return [
-          {
-            picture: '123',
-            name: 'Milos Zivkovic',
-            keyID: '123'
-          },
-          {
-            picture: '1234',
-            name: 'Milos Zivkovic',
-            keyID: '1234'
-          },
-          {
-            picture: '12345',
-            name: 'Milos Zivkovic',
-            keyID: '12345'
-          },
-          {
-            picture: '123456',
-            name: 'Milos Zivkovic',
-            keyID: '123456'
-          },
-          {
-            picture: '1234567',
-            name: 'Milos Zivkovic',
-            keyID: '123456'
-          },
-          {
-            picture: '12345678',
-            name: 'Milos Zivkovic',
-            keyID: '123456'
-          },
-          {
-            picture: '12345689',
-            name: 'Milos Zivkovic',
-            keyID: '123456'
-          },
-          {
-            picture: '1234568910',
-            name: 'Milos Zivkovic',
-            keyID: '123456'
-          },
-          {
-            picture: '1234568911',
-            name: 'Milos Zivkovic',
-            keyID: '123456'
-          }
-        ];
+      const fetchAllIdentities = async () => {
+        return await IdentitiesService.getIdentities({ page: -1, limit: -1 });
       };
 
-      fetchAllContacts()
+      fetchAllIdentities()
         .then((response) => {
-          setAllidentities({ list: response });
+          setAllidentities({ list: response.data });
 
-          setFilteredList({ list: response });
+          setFilteredList({ list: response.data });
         })
         .catch((err) => {
           openSnackbar('Unable to fetch identity list', 'error');
@@ -99,7 +54,7 @@ const SwapIdentities: FC<ISwapIdentitiesProps> = (props) => {
   }, [modalOpen]);
 
   const [filteredList, setFilteredList] = useState<
-    { list: IUserIdentity[] } | undefined
+    { list: IIdentityResponse[] } | undefined
   >({ list: [] });
 
   const manualFilter = (fn: any, array: any) => {
@@ -120,9 +75,9 @@ const SwapIdentities: FC<ISwapIdentitiesProps> = (props) => {
     // Filter if there is a value in search input
     if (value) {
       tempFilteredContacts.list = manualFilter(
-        (contact: any) =>
-          contact.name.toLowerCase().includes(value.toLowerCase()) ||
-          contact.keyID.toLowerCase().includes(value.toLowerCase()),
+        (identity: IIdentityResponse) =>
+          identity.name.toLowerCase().includes(value.toLowerCase()) ||
+          identity.publicKeyID.toLowerCase().includes(value.toLowerCase()),
         allIdentities.list
       );
     }
@@ -132,7 +87,7 @@ const SwapIdentities: FC<ISwapIdentitiesProps> = (props) => {
 
   const classes = useStyles();
 
-  const handleIdentitySelect = (identity: IUserIdentity) => {
+  const handleIdentitySelect = (identity: IIdentityResponse) => {
     setUserIdentity(identity);
     setModalOpen(false);
   };
@@ -204,7 +159,7 @@ const SwapIdentities: FC<ISwapIdentitiesProps> = (props) => {
                           </Avatar>
                         </Box>
                         <Box ml={2}>
-                          <Typography>{`${identity.name} (${identity.keyID})`}</Typography>
+                          <Typography>{`${identity.name} (${identity.publicKeyID})`}</Typography>
                         </Box>
                       </Button>
                     );

@@ -3,6 +3,10 @@ export interface INewContactRequest {
   publicKey: string;
 }
 
+export interface IUpdateContactRequest extends INewContactRequest {
+  contactId: string;
+}
+
 export interface INewContactResponse {
   id: string;
   name: string;

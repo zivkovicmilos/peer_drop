@@ -8,6 +8,10 @@ type PaginationLimits struct {
 }
 
 var (
+	DateFormat = "02.01.2006."
+)
+
+var (
 	NoPagination = PaginationLimits{
 		Limit: -1,
 		Page:  -1,

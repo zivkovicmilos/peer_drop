@@ -14,4 +14,15 @@ export default class CommonUtils {
   static removeLineBreaks(originalString: string): string {
     return originalString.replace(/(\r)/gm, '');
   }
+
+  static fileToBase64 = (file: File): Promise<string> => {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result.toString());
+
+      reader.onerror = (error) => reject(error);
+    });
+  };
 }

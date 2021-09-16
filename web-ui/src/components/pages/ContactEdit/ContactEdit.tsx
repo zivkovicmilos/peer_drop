@@ -5,7 +5,10 @@ import { useFormik } from 'formik';
 import { FC, useEffect, useState } from 'react';
 import { useHistory, useParams } from 'react-router-dom';
 import ContactsService from '../../../services/contacts/contactsService';
-import { INewContactRequest } from '../../../services/contacts/contactsService.types';
+import {
+  INewContactRequest,
+  IUpdateContactRequest
+} from '../../../services/contacts/contactsService.types';
 import newContactValidationSchema from '../../../shared/schemas/contactSchemas';
 import theme from '../../../theme/theme';
 import ActionButton from '../../atoms/ActionButton/ActionButton';
@@ -50,7 +53,6 @@ const ContactEdit: FC<IContactEditProps> = (props) => {
     validationSchema: newContactValidationSchema,
     onSubmit: (values, { resetForm }) => {
       setErrorMessage('');
-      console.log(values);
       if (values.keyPair == null) {
         setErrorMessage('A key pair is required');
         return;
@@ -67,7 +69,15 @@ const ContactEdit: FC<IContactEditProps> = (props) => {
           openSnackbar('Unable to create new contact', 'error');
         });
       } else {
-        // TODO
+        handleUpdateContact({
+          contactId,
+          name: values.name,
+          publicKey: values.keyPair.publicKey
+        }).catch((err) => {
+          resetForm();
+
+          openSnackbar('Unable to update contact', 'error');
+        });
       }
     }
   });
@@ -81,17 +91,49 @@ const ContactEdit: FC<IContactEditProps> = (props) => {
     openSnackbar('Contact successfully created!', 'success');
   };
 
+  const handleUpdateContact = async (
+    updateContactRequest: IUpdateContactRequest
+  ) => {
+    await ContactsService.updateContact(updateContactRequest);
+
+    history.push('/contacts');
+    openSnackbar('Contact successfully updated!', 'success');
+  };
+
   useEffect(() => {
     if (type === EContactEditType.EDIT) {
       // Fetch contact information based on the passed in ID
-      // TODO change mock
+      if (contactId != null) {
+        const fetchContact = async () => {
+          return await ContactsService.getContact(contactId);
+        };
 
-      setInitialValues({
-        name: 'Milos Zivkovic',
-        keyPair: { keyID: '123', publicKey: '123', privateKey: '123' }
-      });
+        fetchContact()
+          .then((contact) => {
+            let keyPair = {
+              keyID: contact.publicKeyID,
+              publicKey: contact.publicKey,
+              privateKey: ''
+            };
 
-      setAddedKey({ keyID: '123', publicKey: '123', privateKey: '123' });
+            setInitialValues({
+              name: contact.name,
+              keyPair
+            });
+
+            setAddedKey(keyPair);
+          })
+          .catch((err) => {
+            openSnackbar('Unable to fetch contact info', 'error');
+
+            setInitialValues({
+              name: '',
+              keyPair: null
+            });
+
+            setAddedKey(null);
+          });
+      }
     }
   }, []);
 

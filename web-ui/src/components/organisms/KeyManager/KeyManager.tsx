@@ -12,7 +12,11 @@ import { Formik } from 'formik';
 import { FC, Fragment, useCallback, useMemo, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import CryptoService from '../../../services/crypto/cryptoService';
-import { IValidatePublicKeyResponse } from '../../../services/crypto/cryptoService.types';
+import {
+  IGenerateKeyPairResponse,
+  IValidatePrivateKeyResponse,
+  IValidatePublicKeyResponse
+} from '../../../services/crypto/cryptoService.types';
 import generateKeyValidationSchema from '../../../shared/schemas/identitySchemas';
 import CommonUtils from '../../../shared/utils/CommonUtils';
 import theme from '../../../theme/theme';
@@ -38,6 +42,8 @@ const KeyManager: FC<IKeyManagerProps> = (props) => {
     useState<EKeyGenerateType>(EKeyGenerateType.RSA_2048);
 
   const [generatedKey, setGeneratedKey] = useState<string>('');
+  const [generateKeyDisabled, setGenerateKeyDisabled] =
+    useState<boolean>(false);
 
   const classes = useStyles();
 
@@ -80,7 +86,14 @@ const KeyManager: FC<IKeyManagerProps> = (props) => {
           privateKey: ''
         });
       } else {
-        // TODO
+        let response: IValidatePrivateKeyResponse =
+          await CryptoService.validatePrivateKey(key);
+
+        await updateKey({
+          keyID: response.publicKeyID,
+          publicKey: response.publicKey,
+          privateKey: key
+        });
       }
 
       openSnackbar('Key successfully added', 'success');
@@ -128,34 +141,28 @@ const KeyManager: FC<IKeyManagerProps> = (props) => {
 
   const { visibleTypes } = props;
 
-  const handleKeyRemove = () => {
+  const handleKeyRemove = async () => {
     setAddedKey(null);
     setBufferKeyPair(null);
     setKeyInputValue('');
+
+    await formik.setFieldValue('keyPair', null);
   };
 
   const validKeyTypes = [EKeyGenerateType.RSA_2048, EKeyGenerateType.RSA_4096];
 
-  const dummyPK =
-    '-----BEGIN RSA PRIVATE KEY-----\n' +
-    'MIICXAIBAAKBgQCqGKukO1De7zhZj6+H0qtjTkVxwTCpvKe4eCZ0FPqri0cb2JZfXJ/DgYSF6vUp' +
-    'wmJG8wVQZKjeGcjDOL5UlsuusFncCzWBQ7RKNUSesmQRMSGkVb1/3j+skZ6UtW+5u09lHNsj6tQ5' +
-    '1s1SPrCBkedbNf0Tp0GbMJDyR4e9T04ZZwIDAQABAoGAFijko56+qGyN8M0RVyaRAXz++xTqHBLh' +
-    '3tx4VgMtrQ+WEgCjhoTwo23KMBAuJGSYnRmoBZM3lMfTKevIkAidPExvYCdm5dYq3XToLkkLv5L2' +
-    'pIIVOFMDG+KESnAFV7l2c+cnzRMW0+b6f8mR1CJzZuxVLL6Q02fvLi55/mbSYxECQQDeAw6fiIQX' +
-    'GukBI4eMZZt4nscy2o12KyYner3VpoeE+Np2q+Z3pvAMd/aNzQ/W9WaI+NRfcxUJrmfPwIGm63il' +
-    'AkEAxCL5HQb2bQr4ByorcMWm/hEP2MZzROV73yF41hPsRC9m66KrheO9HPTJuo3/9s5p+sqGxOlF' +
-    'L0NDt4SkosjgGwJAFklyR1uZ/wPJjj611cdBcztlPdqoxssQGnh85BzCj/u3WqBpE2vjvyyvyI5k' +
-    'X6zk7S0ljKtt2jny2+00VsBerQJBAJGC1Mg5Oydo5NwD6BiROrPxGo2bpTbu/fhrT8ebHkTz2epl' +
-    'U9VQQSQzY1oZMVX8i1m5WUTLPz2yLJIBQVdXqhMCQBGoiuSoSjafUhV7i1cEGpb88h5NBYZzWXGZ' +
-    '37sJ5QsW+sJyoNde3xH8vdXhzU7eT82D6X/scw9RZz+/6rCJ4p0=\n' +
-    '-----END RSA PRIVATE KEY-----';
+  const handleGenerateKey = async (name: string, email: string) => {
+    const response: IGenerateKeyPairResponse =
+      await CryptoService.generateKeyPair({
+        name,
+        email,
+        keySize: activeKeyGeneration == EKeyGenerateType.RSA_2048 ? 2048 : 4096
+      });
 
-  const handleGenerateKey = async () => {
     let keyPair = {
-      keyID: '4AEE18F83AFDEB23',
-      publicKey: '4AEE18F83AFDEB23',
-      privateKey: '4AEE18F83AFDEB23'
+      publicKey: '',
+      privateKey: response.privateKey,
+      keyID: response.publicKeyID
     };
 
     setBufferKeyPair(keyPair);
@@ -169,9 +176,7 @@ const KeyManager: FC<IKeyManagerProps> = (props) => {
 
   // Overwrite modal
   const handleConfirm = async (confirmed: boolean) => {
-    console.log(confirmed);
     if (confirmed) {
-      console.log('Overwriting');
       await updateKey(bufferKeyPair);
     }
 
@@ -180,11 +185,10 @@ const KeyManager: FC<IKeyManagerProps> = (props) => {
   };
 
   const updateKey = async (keyPair: IKeyPair) => {
-    setGeneratedKey(dummyPK); // TODO swap out
+    setGeneratedKey(keyPair.privateKey);
     setAddedKey(keyPair);
 
     await formik.setFieldValue('keyPair', keyPair);
-    console.log(formik.values.keyPair);
   };
 
   const [confirmOpen, setConfirmOpen] = useState<boolean>(false);
@@ -280,10 +284,15 @@ const KeyManager: FC<IKeyManagerProps> = (props) => {
                 size={'small'}
                 multiline
                 placeholder={
-                  '-----BEGIN PGP PUBLIC KEY BLOCK-----\n' +
-                  'Version: GnuPG v1.2.1 (GNU/Linux)\n\n' +
-                  '...\n\n' +
-                  '-----END PGP PUBLIC KEY BLOCK-----'
+                  expectedType == EKeyType.PUBLIC
+                    ? '-----BEGIN PGP PUBLIC KEY BLOCK-----\n' +
+                      'Version: GnuPG v1.2.1 (GNU/Linux)\n\n' +
+                      '...\n\n' +
+                      '-----END PGP PUBLIC KEY BLOCK-----'
+                    : '-----BEGIN PGP PRIVATE KEY BLOCK-----\n' +
+                      'Version: GnuPG v1.2.1 (GNU/Linux)\n\n' +
+                      '...\n\n' +
+                      '-----END PGP PRIVATE KEY BLOCK-----'
                 }
                 onChange={handleKeyInput}
                 onKeyUp={handleKeyInput}
@@ -315,7 +324,20 @@ const KeyManager: FC<IKeyManagerProps> = (props) => {
                 enableReinitialize={true}
                 validationSchema={generateKeyValidationSchema}
                 onSubmit={(values, { resetForm }) => {
-                  handleGenerateKey();
+                  setGenerateKeyDisabled(true);
+                  handleGenerateKey(values.generateName, values.generateEmail)
+                    .then(() => {
+                      openSnackbar(
+                        'Key pair successfully generated!',
+                        'success'
+                      );
+                    })
+                    .catch((err) => {
+                      openSnackbar('Unable to generate key pair', 'error');
+                    })
+                    .finally(() => {
+                      setGenerateKeyDisabled(false);
+                    });
                 }}
               >
                 {(keyGenerationFormik) => (
@@ -388,6 +410,7 @@ const KeyManager: FC<IKeyManagerProps> = (props) => {
                           <ActionButton
                             square={true}
                             text={'Generate'}
+                            disabled={generateKeyDisabled}
                             shouldSubmit={false}
                             onClick={() => keyGenerationFormik.submitForm()}
                           />

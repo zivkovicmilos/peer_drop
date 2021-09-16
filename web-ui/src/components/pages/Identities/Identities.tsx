@@ -2,6 +2,8 @@ import { Box } from '@material-ui/core';
 import AddRoundedIcon from '@material-ui/icons/AddRounded';
 import { FC, useEffect, useState } from 'react';
 import { useHistory } from 'react-router-dom';
+import IdentitiesService from '../../../services/identities/identitiesService';
+import { IIdentityResponse } from '../../../services/identities/identitiesService.types';
 import ActionButton from '../../atoms/ActionButton/ActionButton';
 import PageTitle from '../../atoms/PageTitle/PageTitle';
 import Pagination from '../../atoms/Pagination/Pagination';
@@ -12,7 +14,8 @@ import {
   EIdentitySortDirection,
   EIdentitySortParam
 } from '../../molecules/IdentitySort/identitySort.types';
-import { IIdentitiesProps, IIdentity } from './identities.types';
+import useSnackbar from '../../molecules/Snackbar/useSnackbar.hook';
+import { IIdentitiesProps } from './identities.types';
 
 const Identities: FC<IIdentitiesProps> = () => {
   const history = useHistory();
@@ -24,6 +27,10 @@ const Identities: FC<IIdentitiesProps> = () => {
     EIdentitySortDirection.ASC
   );
 
+  const [identities, setIdentities] = useState<{ data: IIdentityResponse[] }>({
+    data: []
+  });
+
   const handleNewIdentity = () => {
     history.push('/identities/new');
   };
@@ -32,62 +39,26 @@ const Identities: FC<IIdentitiesProps> = () => {
     limit: 8
   });
 
-  // TODO modify this page change listener
+  const { openSnackbar } = useSnackbar();
+
   useEffect(() => {
-    setCount(identities.length);
-  }, []);
+    const fetchIdentities = async () => {
+      return await IdentitiesService.getIdentities({ page, limit });
+    };
+
+    fetchIdentities()
+      .then((response) => {
+        setIdentities({ data: response.data });
+        setCount(response.count);
+      })
+      .catch((err) => {
+        openSnackbar('Unable to fetch identities', 'error');
+
+        setCount(0);
+      });
+  }, [page]);
 
   // TODO add useEffect listeners for the sort params / direction
-
-  // TODO add useEffect for fetching the list of identities
-
-  const identities: IIdentity[] = [
-    {
-      id: '1',
-      picture: 'https://static.dw.com/image/58133780_6.jpg',
-      name: 'Milos',
-
-      publicKeyID: '4AEE18F83AFDEB23',
-      numWorkspaces: 4,
-      creationDate: '20.08.2021.'
-    },
-    {
-      id: '2',
-      picture: '1',
-      name: 'Milos',
-
-      publicKeyID: '4AEE18F83AFDEB23',
-      numWorkspaces: 4,
-      creationDate: '20.08.2021.'
-    },
-    {
-      id: '2',
-      picture: '1',
-      name: 'Milos',
-
-      publicKeyID: '4AEE18F83AFDEB23',
-      numWorkspaces: 4,
-      creationDate: '20.08.2021.'
-    },
-    {
-      id: '3',
-      picture: '1',
-      name: 'Milos',
-
-      publicKeyID: '4AEE18F83AFDEB23',
-      numWorkspaces: 4,
-      creationDate: '20.08.2021.'
-    },
-    {
-      id: '4',
-      picture: '1',
-      name: 'Milos',
-
-      publicKeyID: '4AEE18F83AFDEB23',
-      numWorkspaces: 4,
-      creationDate: '20.08.2021.'
-    }
-  ];
 
   return (
     <Box
@@ -128,14 +99,17 @@ const Identities: FC<IIdentitiesProps> = () => {
           ml={'-36px'}
           mt={'-36px'}
         >
-          {identities.map((identity) => {
+          {identities.data.map((identity) => {
             return (
               <IdentityCard
+                key={`identity-${identity.id}`}
+                id={identity.id}
+                isPrimary={identity.isPrimary}
                 picture={identity.picture}
                 name={identity.name}
                 publicKeyID={identity.publicKeyID}
                 numWorkspaces={identity.numWorkspaces}
-                creationDate={identity.creationDate}
+                dateCreated={identity.dateCreated}
               />
             );
           })}

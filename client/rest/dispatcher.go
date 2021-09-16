@@ -12,6 +12,7 @@ import (
 	"github.com/rs/cors"
 	"github.com/zivkovicmilos/peer_drop/rest/contacts"
 	"github.com/zivkovicmilos/peer_drop/rest/crypto"
+	"github.com/zivkovicmilos/peer_drop/rest/identities"
 	"github.com/zivkovicmilos/peer_drop/storage"
 )
 
@@ -126,8 +127,16 @@ func (d *Dispatcher) registerEndpoints() {
 	d.router.HandleFunc("/api/contacts/{contactId}", contacts.UpdateContact).Methods("PUT")
 	d.router.HandleFunc("/api/contacts/{contactId}", contacts.DeleteContact).Methods("DELETE")
 
+	// Identities
+	d.router.HandleFunc("/api/identities", identities.GetIdentities).Methods("GET")
+	d.router.HandleFunc("/api/identities", identities.CreateIdentity).Methods("POST")
+	d.router.HandleFunc("/api/identities/{identityId}", identities.GetIdentity).Methods("GET")
+	d.router.HandleFunc("/api/identities/{identityId}", identities.UpdateIdentity).Methods("PUT")
+
 	// Crypto
 	d.router.HandleFunc("/api/crypto/validate-public-key", crypto.ValidatePublicKey).Methods("POST")
+	d.router.HandleFunc("/api/crypto/validate-private-key", crypto.ValidatePrivateKey).Methods("POST")
+	d.router.HandleFunc("/api/crypto/generate-key-pair", crypto.GenerateKeyPair).Methods("POST")
 
 	d.router.NotFoundHandler = http.HandlerFunc(NotFoundHandler)
 

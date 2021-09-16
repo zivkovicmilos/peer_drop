@@ -1,5 +1,10 @@
 import { RestService } from '../rest/restService';
-import { IValidatePublicKeyResponse } from './cryptoService.types';
+import {
+  IGenerateKeyPairRequest,
+  IGenerateKeyPairResponse,
+  IValidatePrivateKeyResponse,
+  IValidatePublicKeyResponse
+} from './cryptoService.types';
 
 class CryptoService {
   public static async validatePublicKey(
@@ -17,6 +22,38 @@ class CryptoService {
       throw err;
     }
   }
+
+  public static async validatePrivateKey(
+    privateKey: string
+  ): Promise<IValidatePrivateKeyResponse> {
+    try {
+      return await RestService.post<IValidatePrivateKeyResponse>({
+        url: `crypto/validate-private-key`,
+        data: {
+          privateKey
+        }
+      });
+    } catch (err) {
+      console.warn(err);
+      throw err;
+    }
+  }
+
+  public static async generateKeyPair(
+    request: IGenerateKeyPairRequest
+  ): Promise<IGenerateKeyPairResponse> {
+    try {
+      return await RestService.post<IGenerateKeyPairResponse>({
+        url: `crypto/generate-key-pair`,
+        data: {
+          ...request
+        }
+      });
+    } catch (err) {
+      console.warn(err);
+      throw err;
+    }
+  }
 }
 
-export default CryptoService
+export default CryptoService;

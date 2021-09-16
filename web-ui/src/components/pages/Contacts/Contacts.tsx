@@ -2,10 +2,12 @@ import { Box } from '@material-ui/core';
 import AddRoundedIcon from '@material-ui/icons/AddRounded';
 import { FC, useState } from 'react';
 import { useHistory } from 'react-router-dom';
+import ContactsService from '../../../services/contacts/contactsService';
 import ActionButton from '../../atoms/ActionButton/ActionButton';
 import PageTitle from '../../atoms/PageTitle/PageTitle';
 import ContactsConfirmModal from '../../molecules/ContactsConfirmModal/ContactsConfirmModal';
 import ContactsTable from '../../molecules/ContactsTable/ContactsTable';
+import useSnackbar from '../../molecules/Snackbar/useSnackbar.hook';
 import { IContactConfirmInfo, IContactsProps } from './contacts.types';
 
 const Contacts: FC<IContactsProps> = () => {
@@ -18,8 +20,28 @@ const Contacts: FC<IContactsProps> = () => {
     publicKey: ''
   });
 
+  const { openSnackbar } = useSnackbar();
+
+  const [fetchTrigger, setFetchTrigger] = useState<boolean>(false);
+
+  const handleContactDelete = async (id: string) => {
+    await ContactsService.deleteContact(id);
+  };
+
   const handleConfirm = (confirmed: boolean) => {
     setConfirmOpen(false);
+
+    if (confirmed) {
+      handleContactDelete(confirmInfo.id)
+        .then(() => {
+          openSnackbar('Successfully deleted contact', 'success');
+
+          setFetchTrigger(!fetchTrigger);
+        })
+        .catch((err) => {
+          openSnackbar('Unable to delete contact', 'error');
+        });
+    }
   };
 
   const handleDelete = (contactInfo: IContactConfirmInfo) => {
@@ -58,7 +80,7 @@ const Contacts: FC<IContactsProps> = () => {
         />
       </Box>
 
-      <ContactsTable handleDelete={handleDelete} />
+      <ContactsTable handleDelete={handleDelete} fetchTrigger={fetchTrigger} />
       <ContactsConfirmModal
         contactInfo={confirmInfo}
         open={confirmOpen}

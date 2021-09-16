@@ -68,9 +68,10 @@ const IdentitySort: FC<IIdentitySortProps> = (props) => {
         </Box>
       </Box>
       <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleClose}>
-        {menuItems.map((menuItem) => {
+        {menuItems.map((menuItem, index) => {
           return (
             <MenuItem
+              key={`menuItem-${index}`}
               onClick={() => {
                 handleSortItemSelect(menuItem);
                 handleClose();
