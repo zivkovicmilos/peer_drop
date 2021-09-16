@@ -28,3 +28,11 @@ type NewIdentityRequest struct {
 	Picture    string `json:"picture"`
 	PrivateKey string `json:"privateKey"`
 }
+
+type IdentityPublicKeyResponse struct {
+	PublicKey string `json:"publicKey"`
+}
+
+type IdentityPrivateKeyResponse struct {
+	PrivateKey string `json:"privateKey"`
+}

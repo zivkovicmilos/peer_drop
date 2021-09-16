@@ -11,12 +11,15 @@ import { MoreVertRounded } from '@material-ui/icons';
 import TodayRoundedIcon from '@material-ui/icons/TodayRounded';
 import VpnKeyRoundedIcon from '@material-ui/icons/VpnKeyRounded';
 import clsx from 'clsx';
+import fileDownload from 'js-file-download';
 import { FC, useContext, useState } from 'react';
 import { useHistory } from 'react-router-dom';
 import SessionContext from '../../../context/SessionContext';
+import IdentitiesService from '../../../services/identities/identitiesService';
 import { ReactComponent as CurrentIdentity } from '../../../shared/assets/icons/verified_black_24dp.svg';
 import { ReactComponent as WorkspacesRoundedIcon } from '../../../shared/assets/icons/workspaces_black_24dp.svg';
 import theme from '../../../theme/theme';
+import useSnackbar from '../Snackbar/useSnackbar.hook';
 import {
   EIdentityCardMenuItem,
   IIdentityCardProps
@@ -30,7 +33,9 @@ const IdentityCard: FC<IIdentityCardProps> = (props) => {
     numWorkspaces,
     dateCreated,
     id,
-    isPrimary
+    isPrimary,
+    setTriggerUpdate,
+    triggerUpdate
   } = props;
 
   const { userIdentity } = useContext(SessionContext);
@@ -53,6 +58,8 @@ const IdentityCard: FC<IIdentityCardProps> = (props) => {
 
   const history = useHistory();
 
+  const { openSnackbar } = useSnackbar();
+
   const menuItems: IdentityCardMenuItem[] = [
     {
       type: EIdentityCardMenuItem.EDIT,
@@ -63,19 +70,60 @@ const IdentityCard: FC<IIdentityCardProps> = (props) => {
     {
       type: EIdentityCardMenuItem.SHARE,
       onClick: (identityId: string) => {
-        // TODO define
+        // Grab the public key
+        IdentitiesService.getIdentityPublicKey(identityId)
+          .then((response) => {
+            const file = new Blob([response.publicKey], { type: 'text/plain' });
+            fileDownload(file, `${name}_${publicKeyID}_PUBLIC.asc`);
+          })
+          .catch((err) => {
+            openSnackbar('Unable to export public key', 'error');
+          });
       }
     },
     {
       type: EIdentityCardMenuItem.BACKUP,
       onClick: (identityId: string) => {
-        // TODO define
+        // Grab the private key
+        IdentitiesService.getIdentityPrivateKey(identityId)
+          .then((response) => {
+            const file = new Blob([response.privateKey], {
+              type: 'text/plain'
+            });
+            fileDownload(file, `${name}_${publicKeyID}_SECRET.asc`);
+          })
+          .catch((err) => {
+            openSnackbar('Unable to export private key', 'error');
+          });
       }
     },
     {
-      type: EIdentityCardMenuItem.SET_IDENTITY,
+      type: EIdentityCardMenuItem.DELETE,
       onClick: (identityId: string) => {
-        // TODO define
+        // Delete the identity
+        IdentitiesService.deleteIdentity(identityId)
+          .then((response) => {
+            openSnackbar('Identity successfully deleted', 'success');
+
+            setTriggerUpdate(!triggerUpdate);
+          })
+          .catch((err) => {
+            openSnackbar('Unable to export private key', 'error');
+          });
+      }
+    },
+    {
+      type: EIdentityCardMenuItem.SET_AS_PRIMARY,
+      onClick: (identityId: string) => {
+        IdentitiesService.setPrimaryIdentity(identityId)
+          .then((response) => {
+            openSnackbar('Identity set as primary', 'success');
+
+            setTriggerUpdate(!triggerUpdate);
+          })
+          .catch((err) => {
+            openSnackbar('Unable to update identity', 'error');
+          });
       }
     }
   ];

@@ -131,7 +131,11 @@ func (d *Dispatcher) registerEndpoints() {
 	d.router.HandleFunc("/api/identities", identities.GetIdentities).Methods("GET")
 	d.router.HandleFunc("/api/identities", identities.CreateIdentity).Methods("POST")
 	d.router.HandleFunc("/api/identities/{identityId}", identities.GetIdentity).Methods("GET")
+	d.router.HandleFunc("/api/identities/{identityId}/public-key", identities.GetPublicKey).Methods("GET")
+	d.router.HandleFunc("/api/identities/{identityId}/private-key", identities.GetPrivateKey).Methods("GET")
 	d.router.HandleFunc("/api/identities/{identityId}", identities.UpdateIdentity).Methods("PUT")
+	d.router.HandleFunc("/api/identities/{identityId}/set-primary", identities.SetAsPrimary).Methods("PUT")
+	d.router.HandleFunc("/api/identities/{identityId}", identities.DeleteIdentity).Methods("DELETE")
 
 	// Crypto
 	d.router.HandleFunc("/api/crypto/validate-public-key", crypto.ValidatePublicKey).Methods("POST")

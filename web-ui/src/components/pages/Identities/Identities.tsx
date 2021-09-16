@@ -1,10 +1,14 @@
 import { Box } from '@material-ui/core';
 import AddRoundedIcon from '@material-ui/icons/AddRounded';
-import { FC, useEffect, useState } from 'react';
+import { FC, Fragment, useEffect, useState } from 'react';
 import { useHistory } from 'react-router-dom';
 import IdentitiesService from '../../../services/identities/identitiesService';
 import { IIdentityResponse } from '../../../services/identities/identitiesService.types';
+import CommonUtils from '../../../shared/utils/CommonUtils';
+import theme from '../../../theme/theme';
 import ActionButton from '../../atoms/ActionButton/ActionButton';
+import LoadingIndicator from '../../atoms/LoadingIndicator/LoadingIndicator';
+import NoData from '../../atoms/NoData/NoData';
 import PageTitle from '../../atoms/PageTitle/PageTitle';
 import Pagination from '../../atoms/Pagination/Pagination';
 import usePagination from '../../atoms/Pagination/pagination.hook';
@@ -41,9 +45,14 @@ const Identities: FC<IIdentitiesProps> = () => {
 
   const { openSnackbar } = useSnackbar();
 
+  const [triggerUpdate, setTriggerUpdate] = useState<boolean>(false);
+
   useEffect(() => {
     const fetchIdentities = async () => {
-      return await IdentitiesService.getIdentities({ page, limit });
+      return await IdentitiesService.getIdentities(
+        { page, limit },
+        CommonUtils.formatSortParams(activeSort, sortDirection)
+      );
     };
 
     fetchIdentities()
@@ -56,9 +65,50 @@ const Identities: FC<IIdentitiesProps> = () => {
 
         setCount(0);
       });
-  }, [page]);
+  }, [page, triggerUpdate, sortDirection, activeSort]);
 
-  // TODO add useEffect listeners for the sort params / direction
+  const renderMainSection = () => {
+    if (identities && count > 0) {
+      return (
+        <Fragment>
+          <Box
+            display={'flex'}
+            flexWrap={'wrap'}
+            width={'100%'}
+            ml={'-36px'}
+            mt={'-36px'}
+          >
+            {identities.data.map((identity) => {
+              return (
+                <IdentityCard
+                  key={`identity-${identity.id}`}
+                  id={identity.id}
+                  isPrimary={identity.isPrimary}
+                  picture={identity.picture}
+                  name={identity.name}
+                  publicKeyID={identity.publicKeyID}
+                  numWorkspaces={identity.numWorkspaces}
+                  dateCreated={identity.dateCreated}
+                  triggerUpdate={triggerUpdate}
+                  setTriggerUpdate={setTriggerUpdate}
+                />
+              );
+            })}
+          </Box>
+          <Pagination
+            count={count}
+            limit={limit}
+            page={page}
+            onPageChange={handlePageChange}
+          />
+        </Fragment>
+      );
+    } else if (count == 0) {
+      return <NoData text={'No identities found'} />;
+    } else {
+      return <LoadingIndicator style={{ color: theme.palette.primary.main }} />;
+    }
+  };
 
   return (
     <Box
@@ -92,34 +142,7 @@ const Identities: FC<IIdentitiesProps> = () => {
       </Box>
 
       <Box display={'flex'} width={'100%'} flexDirection={'column'}>
-        <Box
-          display={'flex'}
-          flexWrap={'wrap'}
-          width={'100%'}
-          ml={'-36px'}
-          mt={'-36px'}
-        >
-          {identities.data.map((identity) => {
-            return (
-              <IdentityCard
-                key={`identity-${identity.id}`}
-                id={identity.id}
-                isPrimary={identity.isPrimary}
-                picture={identity.picture}
-                name={identity.name}
-                publicKeyID={identity.publicKeyID}
-                numWorkspaces={identity.numWorkspaces}
-                dateCreated={identity.dateCreated}
-              />
-            );
-          })}
-        </Box>
-        <Pagination
-          count={count}
-          limit={limit}
-          page={page}
-          onPageChange={handlePageChange}
-        />
+        {renderMainSection()}
       </Box>
     </Box>
   );

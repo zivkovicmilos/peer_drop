@@ -16,7 +16,12 @@ import { FC, useContext, useEffect, useState } from 'react';
 import SessionContext from '../../../context/SessionContext';
 import IdentitiesService from '../../../services/identities/identitiesService';
 import { IIdentityResponse } from '../../../services/identities/identitiesService.types';
+import CommonUtils from '../../../shared/utils/CommonUtils';
 import LoadingIndicator from '../../atoms/LoadingIndicator/LoadingIndicator';
+import {
+  EIdentitySortDirection,
+  EIdentitySortParam
+} from '../IdentitySort/identitySort.types';
 import useSnackbar from '../Snackbar/useSnackbar.hook';
 import { ISwapIdentitiesProps } from './swapIdentities.types';
 
@@ -35,7 +40,13 @@ const SwapIdentities: FC<ISwapIdentitiesProps> = (props) => {
   useEffect(() => {
     if (modalOpen) {
       const fetchAllIdentities = async () => {
-        return await IdentitiesService.getIdentities({ page: -1, limit: -1 });
+        return await IdentitiesService.getIdentities(
+          { page: -1, limit: -1 },
+          CommonUtils.formatSortParams(
+            EIdentitySortParam.NAME,
+            EIdentitySortDirection.ASC
+          )
+        );
       };
 
       fetchAllIdentities()

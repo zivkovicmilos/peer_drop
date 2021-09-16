@@ -17,3 +17,11 @@ export interface IIdentityResponse {
   isPrimary: boolean;
   numWorkspaces: number;
 }
+
+export interface IIdentityPublicKeyResponse {
+  publicKey: string;
+}
+
+export interface IIdentityPrivateKeyResponse {
+  privateKey: string;
+}

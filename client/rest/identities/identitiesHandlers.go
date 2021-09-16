@@ -87,7 +87,11 @@ func GetIdentities(w http.ResponseWriter, r *http.Request) {
 	page := r.URL.Query().Get("page")
 	paginationLimits := utils.ParsePagination(limit, page)
 
-	identities, totalIdentities, identitiesError := storage.GetStorageHandler().GetIdentities(paginationLimits)
+	sortParam := r.URL.Query().Get("sortParam")
+	sortDirection := r.URL.Query().Get("sortDirection")
+	sortParams := utils.ParseSortParams(sortParam, sortDirection)
+
+	identities, totalIdentities, identitiesError := storage.GetStorageHandler().GetIdentities(paginationLimits, sortParams)
 	if identitiesError != nil {
 		http.Error(w, "Unable to fetch identities", http.StatusInternalServerError)
 		return
@@ -171,6 +175,104 @@ func UpdateIdentity(w http.ResponseWriter, r *http.Request) {
 	}
 
 	encodeErr := json.NewEncoder(w).Encode("Identity updated")
+	if encodeErr != nil {
+		http.Error(w, "Unable to encode response", http.StatusInternalServerError)
+	}
+}
+
+// SetAsPrimary updates a single identity to be the primary one
+func SetAsPrimary(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+
+	// Check to see if the contact exists
+	identity, identityError := storage.GetStorageHandler().GetIdentity(params["identityId"])
+	if identityError != nil {
+		http.Error(w, "Unable to fetch identity", http.StatusInternalServerError)
+		return
+	}
+
+	if identity == nil {
+		http.Error(w, "Identity not found", http.StatusNotFound)
+		return
+	}
+
+	updateErr := storage.GetStorageHandler().UpdateIdentityPrimary(identity.ID)
+	if updateErr != nil {
+		http.Error(w, "Unable to update identity", http.StatusInternalServerError)
+		return
+	}
+
+	encodeErr := json.NewEncoder(w).Encode("Identity updated")
+	if encodeErr != nil {
+		http.Error(w, "Unable to encode response", http.StatusInternalServerError)
+	}
+}
+
+// GetPublicKey fetches the identity's public key
+func GetPublicKey(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+
+	identity, contactError := storage.GetStorageHandler().GetIdentity(params["identityId"])
+	if contactError != nil {
+		http.Error(w, "Unable to fetch identity", http.StatusInternalServerError)
+		return
+	}
+
+	if identity == nil {
+		http.Error(w, "Identity not found", http.StatusNotFound)
+		return
+	}
+
+	encodeErr := json.NewEncoder(w).Encode(types.IdentityPublicKeyResponse{PublicKey: identity.PublicKey})
+	if encodeErr != nil {
+		http.Error(w, "Unable to encode response", http.StatusInternalServerError)
+	}
+}
+
+// GetPrivateKey fetches the identity's private key
+func GetPrivateKey(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+
+	identity, contactError := storage.GetStorageHandler().GetIdentity(params["identityId"])
+	if contactError != nil {
+		http.Error(w, "Unable to fetch identity", http.StatusInternalServerError)
+		return
+	}
+
+	if identity == nil {
+		http.Error(w, "Identity not found", http.StatusNotFound)
+		return
+	}
+
+	encodeErr := json.NewEncoder(w).Encode(types.IdentityPrivateKeyResponse{PrivateKey: identity.PrivateKey})
+	if encodeErr != nil {
+		http.Error(w, "Unable to encode response", http.StatusInternalServerError)
+	}
+}
+
+// DeleteIdentity deletes a single identity
+func DeleteIdentity(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+
+	// Check to see if the contact exists
+	identity, identityError := storage.GetStorageHandler().GetIdentity(params["identityId"])
+	if identityError != nil {
+		http.Error(w, "Unable to fetch identity", http.StatusInternalServerError)
+		return
+	}
+
+	if identity == nil {
+		http.Error(w, "Identity not found", http.StatusNotFound)
+		return
+	}
+
+	deleteError := storage.GetStorageHandler().DeleteIdentity(*identity)
+	if deleteError != nil {
+		http.Error(w, "Unable to delete identity", http.StatusInternalServerError)
+		return
+	}
+
+	encodeErr := json.NewEncoder(w).Encode("Identity deleted")
 	if encodeErr != nil {
 		http.Error(w, "Unable to encode response", http.StatusInternalServerError)
 	}

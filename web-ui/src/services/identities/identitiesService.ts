@@ -1,6 +1,12 @@
 import { RestService } from '../rest/restService';
-import { IListResponse, IPagination } from '../rest/restService.types';
 import {
+  IListResponse,
+  IPagination,
+  ISortParams
+} from '../rest/restService.types';
+import {
+  IIdentityPrivateKeyResponse,
+  IIdentityPublicKeyResponse,
   IIdentityResponse,
   INewIdentityRequest,
   IUpdateIdentityRequest
@@ -24,12 +30,12 @@ class IdentitiesService {
   }
 
   public static async getIdentities(
-    pagination: IPagination
-    // TODO add sort param
+    pagination: IPagination,
+    sortParams: ISortParams
   ): Promise<IListResponse<IIdentityResponse>> {
     try {
       return await RestService.get<IListResponse<IIdentityResponse>>({
-        url: `identities?page=${pagination.page}&limit=${pagination.limit}`
+        url: `identities?page=${pagination.page}&limit=${pagination.limit}&sortParam=${sortParams.sortParam}&sortDirection=${sortParams.sortDirection}`
       });
     } catch (err) {
       console.warn(err);
@@ -50,6 +56,32 @@ class IdentitiesService {
     }
   }
 
+  public static async getIdentityPublicKey(
+    identityId: string
+  ): Promise<IIdentityPublicKeyResponse> {
+    try {
+      return await RestService.get<IIdentityPublicKeyResponse>({
+        url: `identities/${identityId}/public-key`
+      });
+    } catch (err) {
+      console.warn(err);
+      throw err;
+    }
+  }
+
+  public static async getIdentityPrivateKey(
+    identityId: string
+  ): Promise<IIdentityPrivateKeyResponse> {
+    try {
+      return await RestService.get<IIdentityPrivateKeyResponse>({
+        url: `identities/${identityId}/private-key`
+      });
+    } catch (err) {
+      console.warn(err);
+      throw err;
+    }
+  }
+
   public static async updateIdentity(
     request: IUpdateIdentityRequest
   ): Promise<string> {
@@ -61,6 +93,28 @@ class IdentitiesService {
           picture: request.picture,
           privateKey: request.privateKey
         }
+      });
+    } catch (err) {
+      console.warn(err);
+      throw err;
+    }
+  }
+
+  public static async setPrimaryIdentity(identityId: string): Promise<string> {
+    try {
+      return await RestService.put<string>({
+        url: `identities/${identityId}/set-primary`
+      });
+    } catch (err) {
+      console.warn(err);
+      throw err;
+    }
+  }
+
+  public static async deleteIdentity(identityId: string): Promise<string> {
+    try {
+      return await RestService.delete<string>({
+        url: `identities/${identityId}`
       });
     } catch (err) {
       console.warn(err);

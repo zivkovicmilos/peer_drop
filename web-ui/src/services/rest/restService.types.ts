@@ -15,3 +15,8 @@ export interface IPagination {
   page?: number;
   limit?: number;
 }
+
+export interface ISortParams {
+  sortParam?: string;
+  sortDirection?: string;
+}

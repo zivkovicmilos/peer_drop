@@ -3,8 +3,10 @@ package storage
 import (
 	"bytes"
 	"math/big"
+	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/syndtr/goleveldb/leveldb"
@@ -25,6 +27,8 @@ var (
 	CONTACTS   = []byte("contacts")
 	IDENTITIES = []byte("identities")
 	WORKSPACES = []byte("workspaces")
+
+	IDENTITY_PRIMARY = []byte("identityPrimary")
 )
 
 // Sub-prefixes
@@ -229,28 +233,22 @@ func (sh *StorageHandler) CreateContact(contact types.Contact) error {
 // DeleteContact deletes a contact from the DB
 func (sh *StorageHandler) DeleteContact(contact types.Contact) error {
 	fieldPairs := []struct {
-		key   []byte
-		value []byte
+		key []byte
 	}{
 		{
 			CONTACT_NAME,
-			[]byte(contact.Name),
 		},
 		{
 			CONTACT_EMAIL,
-			[]byte(contact.Email),
 		},
 		{
 			CONTACT_DATE_ADDED,
-			[]byte(contact.DateAdded),
 		},
 		{
 			CONTACT_PUBLIC_KEY,
-			[]byte(contact.PublicKey),
 		},
 		{
 			CONTACT_PUBLIC_KEY_ID,
-			[]byte(contact.PublicKeyID),
 		},
 	}
 
@@ -268,6 +266,54 @@ func (sh *StorageHandler) DeleteContact(contact types.Contact) error {
 
 // IDENTITIES //
 
+// GetPrimaryIdentity returns the ID of the identity that's primary
+func (sh *StorageHandler) GetPrimaryIdentity() string {
+	entityKeyBase := append(IDENTITY_PRIMARY, delimiter...)
+
+	value, err := sh.db.Get(entityKeyBase, nil)
+	if err != nil {
+		return ""
+	}
+
+	return string(value)
+}
+
+// SetPrimaryIdentity sets the primary identity.
+// Only updates the IDENTITY_PRIMARY keyset
+func (sh *StorageHandler) SetPrimaryIdentity(id string) error {
+	entityKeyBase := append(append(IDENTITY_PRIMARY, delimiter...), []byte(id)...)
+
+	return sh.db.Put(entityKeyBase, []byte(id), nil)
+}
+
+// UpdateIdentityPrimary sets a new primary identity
+func (sh *StorageHandler) UpdateIdentityPrimary(id string) error {
+	// Unmark the previous primary identity
+	previousPrimary := sh.GetPrimaryIdentity()
+	if previousPrimary != "" {
+		// Set its isPrimary field to false
+		// TODO fix this
+		entityKeyBase := append(append(IDENTITIES, delimiter...), append([]byte(previousPrimary), delimiter...)...)
+		entityKeyBase = append(entityKeyBase, IDENTITY_IS_PRIMARY...)
+
+		putError := sh.db.Put(entityKeyBase, []byte{0}, nil)
+		if putError != nil {
+			return putError
+		}
+	}
+
+	// Update the IDENTITY_PRIMARY index
+	if identityPrimaryError := sh.SetPrimaryIdentity(id); identityPrimaryError != nil {
+		return identityPrimaryError
+	}
+
+	// Update the main DB instance field
+	entityKeyBase := append(append(IDENTITIES, delimiter...), append([]byte(id), delimiter...)...)
+	entityKeyBase = append(entityKeyBase, IDENTITY_IS_PRIMARY...)
+
+	return sh.db.Put(entityKeyBase, []byte{1}, nil)
+}
+
 // CreateIdentity stores the identity into the DB
 func (sh *StorageHandler) CreateIdentity(identity types.Identity) error {
 	var isPrimaryValue []byte
@@ -275,6 +321,15 @@ func (sh *StorageHandler) CreateIdentity(identity types.Identity) error {
 		isPrimaryValue = []byte{1}
 	} else {
 		isPrimaryValue = []byte{0}
+	}
+
+	primaryIdentityValue := sh.GetPrimaryIdentity()
+	if primaryIdentityValue == "" {
+		// No primary identity set, this is the first identity, so it should be the primary one
+		isPrimaryValue = []byte{1}
+		if setPrimaryErr := sh.SetPrimaryIdentity(identity.ID); setPrimaryErr != nil {
+			return setPrimaryErr
+		}
 	}
 
 	fieldPairs := []struct {
@@ -323,6 +378,52 @@ func (sh *StorageHandler) CreateIdentity(identity types.Identity) error {
 			return putError
 		}
 	}
+
+	return nil
+}
+
+// DeleteIdentity deletes the identity from the DB
+func (sh *StorageHandler) DeleteIdentity(identity types.Identity) error {
+
+	fieldPairs := []struct {
+		key []byte
+	}{
+		{
+			IDENTITY_NAME,
+		},
+		{
+			IDENTITY_PICTURE,
+		},
+		{
+			IDENTITY_DATE_CREATED,
+		},
+		{
+			IDENTITY_PRIVATE_KEY,
+		},
+		{
+			IDENTITY_PUBLIC_KEY,
+		},
+		{
+			IDENTITY_PUBLIC_KEY_ID,
+		},
+		{
+			IDENTITY_IS_PRIMARY,
+		},
+		{
+			IDENTITY_NUM_WORKSPACES,
+		},
+	}
+
+	entityKeyBase := append(append(IDENTITIES, delimiter...), append([]byte(identity.ID), delimiter...)...)
+	for _, field := range fieldPairs {
+		colonSeparated := append(entityKeyBase, delimiter...)
+		deleteError := sh.db.Delete(append(colonSeparated, field.key...), nil)
+		if deleteError != nil {
+			return deleteError
+		}
+	}
+
+	// TODO Update the primary identity if primary is deleted
 
 	return nil
 }
@@ -378,6 +479,7 @@ func (sh *StorageHandler) GetIdentity(id string) (*types.Identity, error) {
 // GetIdentities fetches all identities
 func (sh *StorageHandler) GetIdentities(
 	paginationLimits utils.PaginationLimits,
+	sortParams utils.SortParams,
 ) ([]*types.Identity, int, error) {
 	var foundIdentities []*types.Identity
 
@@ -404,6 +506,49 @@ func (sh *StorageHandler) GetIdentities(
 
 	totalIdentities := len(foundIdentities)
 
+	// Enforce sort
+	switch sortParams.SortParam {
+	case utils.SORT_NAME:
+		sort.Slice(foundIdentities, func(i, j int) bool {
+			comparison := strings.Compare(foundIdentities[i].Name, foundIdentities[j].Name)
+
+			if sortParams.SortDirection == utils.SORT_DIR_ASC {
+				return comparison <= 0
+			} else {
+				return comparison > 0
+			}
+		})
+	case utils.SORT_PUBLIC_KEY_ID:
+		sort.Slice(foundIdentities, func(i, j int) bool {
+			comparison := strings.Compare(foundIdentities[i].PublicKeyID, foundIdentities[j].PublicKeyID)
+
+			if sortParams.SortDirection == utils.SORT_DIR_ASC {
+				return comparison <= 0
+			} else {
+				return comparison > 0
+			}
+		})
+	case utils.SORT_NUM_WORKSPACES:
+		sort.Slice(foundIdentities, func(i, j int) bool {
+			if sortParams.SortDirection == utils.SORT_DIR_ASC {
+				return foundIdentities[i].NumWorkspaces <= foundIdentities[j].NumWorkspaces
+			} else {
+				return foundIdentities[i].NumWorkspaces > foundIdentities[j].NumWorkspaces
+			}
+		})
+	case utils.SORT_DATE_CREATED:
+		sort.Slice(foundIdentities, func(i, j int) bool {
+			dateI, _ := time.Parse(utils.DateFormat, foundIdentities[i].DateCreated)
+			dateJ, _ := time.Parse(utils.DateFormat, foundIdentities[j].DateCreated)
+			if sortParams.SortDirection == utils.SORT_DIR_ASC {
+				return dateI.Before(dateJ)
+			} else {
+				return dateI.After(dateJ)
+			}
+		})
+	}
+
+	// Enforce pagination
 	if paginationLimits != utils.NoPagination && totalIdentities != 0 {
 		offset := (paginationLimits.Page - 1) * paginationLimits.Limit
 
@@ -413,7 +558,7 @@ func (sh *StorageHandler) GetIdentities(
 		}
 
 		foundIdentities = foundIdentities[offset:upperBound]
-	} else {
+	} else if totalIdentities == 0 {
 		foundIdentities = []*types.Identity{}
 	}
 
