@@ -15,8 +15,10 @@ import KeyboardArrowDownRoundedIcon from '@material-ui/icons/KeyboardArrowDownRo
 import KeyboardArrowUpRoundedIcon from '@material-ui/icons/KeyboardArrowUpRounded';
 import PowerSettingsNewRoundedIcon from '@material-ui/icons/PowerSettingsNewRounded';
 import SwapHorizRoundedIcon from '@material-ui/icons/SwapHorizRounded';
-import React, { FC, useContext, useRef, useState } from 'react';
+import React, { FC, Fragment, useContext, useRef, useState } from 'react';
 import SessionContext from '../../../context/SessionContext';
+import CommonService from '../../../services/common/commonService';
+import useSnackbar from '../Snackbar/useSnackbar.hook';
 import SwapIdentities from '../SwapIdentities/SwapIdentities';
 import { IUserMenuProps } from './userMenu.types';
 
@@ -45,10 +47,32 @@ const UserMenu: FC<IUserMenuProps> = () => {
   const [switchIdentitiesOpen, setSwitchIdentitiesOpen] =
     useState<boolean>(false);
 
-  return (
-    <div ref={anchorRef} className={classes.buttonWrapper}>
-      <Button onClick={handleToggle}>
-        <Box className={classes.userMenuWrapper}>
+  const { openSnackbar } = useSnackbar();
+
+  const closeTab = () => {
+    window.opener = null;
+    window.open('', '_self');
+    window.close();
+  };
+
+  const handleShutdown = () => {
+    const sendShutdownSignal = async () => {
+      return await CommonService.shutdown();
+    };
+
+    sendShutdownSignal()
+      .then((response) => {
+        closeTab();
+      })
+      .catch((err) => {
+        openSnackbar('Unable to shutdown service gracefully', 'error');
+      });
+  };
+
+  const renderUserInfo = () => {
+    if (userIdentity != null) {
+      return (
+        <Fragment>
           <Avatar
             variant="rounded"
             src={userIdentity.picture}
@@ -61,6 +85,29 @@ const UserMenu: FC<IUserMenuProps> = () => {
               {userIdentity.name}
             </Typography>
           </Box>
+        </Fragment>
+      );
+    } else {
+      return (
+        <Fragment>
+          <Avatar variant="rounded" className={classes.identityPicture}>
+            ?
+          </Avatar>
+          <Box display={'flex'} ml={1.5}>
+            <Typography className={classes.selectedIdentity}>
+              No identity
+            </Typography>
+          </Box>
+        </Fragment>
+      );
+    }
+  };
+
+  return (
+    <div ref={anchorRef} className={classes.buttonWrapper}>
+      <Button onClick={handleToggle}>
+        <Box className={classes.userMenuWrapper}>
+          {renderUserInfo()}
           {open ? (
             <KeyboardArrowUpRoundedIcon />
           ) : (
@@ -103,7 +150,12 @@ const UserMenu: FC<IUserMenuProps> = () => {
                       <Box ml={1}>Change identity</Box>
                     </Box>
                   </MenuItem>
-                  <MenuItem className={classes.userMenuItem}>
+                  <MenuItem
+                    className={classes.userMenuItem}
+                    onClick={() => {
+                      handleShutdown();
+                    }}
+                  >
                     <Box display={'flex'}>
                       <PowerSettingsNewRoundedIcon />
                       <Box ml={1}>Shutdown</Box>

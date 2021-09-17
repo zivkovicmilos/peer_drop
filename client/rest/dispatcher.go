@@ -2,9 +2,12 @@ package rest
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"syscall"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -118,6 +121,22 @@ func NotFoundHandler(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "Route not found", http.StatusNotFound)
 }
 
+// ShutdownHandler closes the peer_drop server service
+func ShutdownHandler(w http.ResponseWriter, r *http.Request) {
+	p, err := os.FindProcess(os.Getpid())
+	if err != nil {
+		http.Error(w, "Unable to find process", http.StatusInternalServerError)
+		return
+	}
+
+	encodeErr := json.NewEncoder(w).Encode("Shutting down...")
+	if encodeErr != nil {
+		http.Error(w, "Unable to encode response", http.StatusInternalServerError)
+	}
+
+	_ = p.Signal(syscall.SIGQUIT)
+}
+
 // registerEndpoints registers all available REST endpoints
 func (d *Dispatcher) registerEndpoints() {
 	// Contacts
@@ -136,11 +155,15 @@ func (d *Dispatcher) registerEndpoints() {
 	d.router.HandleFunc("/api/identities/{identityId}", identities.UpdateIdentity).Methods("PUT")
 	d.router.HandleFunc("/api/identities/{identityId}/set-primary", identities.SetAsPrimary).Methods("PUT")
 	d.router.HandleFunc("/api/identities/{identityId}", identities.DeleteIdentity).Methods("DELETE")
+	d.router.HandleFunc("/api/me", identities.GetPrimaryIdentity).Methods("GET")
 
 	// Crypto
 	d.router.HandleFunc("/api/crypto/validate-public-key", crypto.ValidatePublicKey).Methods("POST")
 	d.router.HandleFunc("/api/crypto/validate-private-key", crypto.ValidatePrivateKey).Methods("POST")
 	d.router.HandleFunc("/api/crypto/generate-key-pair", crypto.GenerateKeyPair).Methods("POST")
+
+	// Shutdown handler
+	d.router.HandleFunc("/api/shutdown", ShutdownHandler).Methods("POST")
 
 	d.router.NotFoundHandler = http.HandlerFunc(NotFoundHandler)
 

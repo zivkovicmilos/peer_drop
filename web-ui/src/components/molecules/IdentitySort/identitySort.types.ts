@@ -8,7 +8,7 @@ export interface IIdentitySortProps {
 
 export enum EIdentitySortParam {
   NAME = 'Name',
-  PUBLIC_KEY = 'Public Key',
+  PUBLIC_KEY = 'Public Key ID',
   NUMBER_OF_WORKSPACES = 'Num. of Workspaces',
   CREATION_DATE = 'Creation Date'
 }

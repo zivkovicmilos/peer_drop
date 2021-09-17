@@ -4,6 +4,7 @@ import {
   IconButton,
   Menu,
   MenuItem,
+  Tooltip,
   Typography
 } from '@material-ui/core';
 import { makeStyles } from '@material-ui/core/styles';
@@ -145,12 +146,14 @@ const IdentityCard: FC<IIdentityCardProps> = (props) => {
 
           {isPrimary && (
             <Box ml={0.5}>
-              <CurrentIdentity
-                style={{
-                  width: '15px',
-                  height: 'auto'
-                }}
-              />
+              <Tooltip title={'Primary identity'} arrow>
+                <CurrentIdentity
+                  style={{
+                    width: '15px',
+                    height: 'auto'
+                  }}
+                />
+              </Tooltip>
             </Box>
           )}
         </Box>

@@ -56,6 +56,17 @@ class IdentitiesService {
     }
   }
 
+  public static async getPrimaryIdentity(): Promise<IIdentityResponse> {
+    try {
+      return await RestService.get<IIdentityResponse>({
+        url: `me`
+      });
+    } catch (err) {
+      console.warn(err);
+      throw err;
+    }
+  }
+
   public static async getIdentityPublicKey(
     identityId: string
   ): Promise<IIdentityPublicKeyResponse> {

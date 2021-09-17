@@ -170,7 +170,9 @@ const SwapIdentities: FC<ISwapIdentitiesProps> = (props) => {
                           </Avatar>
                         </Box>
                         <Box ml={2}>
-                          <Typography>{`${identity.name} (${identity.publicKeyID})`}</Typography>
+                          <Typography
+                            style={{ textAlign: 'left' }}
+                          >{`${identity.name} (${identity.publicKeyID})`}</Typography>
                         </Box>
                       </Button>
                     );

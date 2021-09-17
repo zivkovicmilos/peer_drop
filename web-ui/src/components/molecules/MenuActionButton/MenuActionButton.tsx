@@ -6,20 +6,24 @@ import {
   MenuItem,
   MenuList,
   Paper,
-  Popper
+  Popper,
+  Tooltip
 } from '@material-ui/core';
 import { makeStyles } from '@material-ui/core/styles';
 import KeyboardArrowDownRoundedIcon from '@material-ui/icons/KeyboardArrowDownRounded';
 import KeyboardArrowUpRoundedIcon from '@material-ui/icons/KeyboardArrowUpRounded';
 import clsx from 'clsx';
-import React, { FC, Fragment, useRef, useState } from 'react';
+import React, { FC, Fragment, useContext, useRef, useState } from 'react';
 import { useHistory } from 'react-router-dom';
+import SessionContext from '../../../context/SessionContext';
 import Link from '../../atoms/Link/Link';
 import { IMenuActionButtonProps } from './menuActionButton.types';
 
 const MenuActionButton: FC<IMenuActionButtonProps> = () => {
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLDivElement>(null);
+
+  const { userIdentity } = useContext(SessionContext);
 
   const classes = useStyles();
   const history = useHistory();
@@ -39,11 +43,12 @@ const MenuActionButton: FC<IMenuActionButtonProps> = () => {
     setOpen(false);
   };
 
-  return (
-    <Fragment>
+  const renderButtonGroup = () => {
+    return (
       <ButtonGroup
         variant="contained"
         ref={anchorRef}
+        disabled={userIdentity == null}
         style={{
           border: 'none',
           outline: 'none',
@@ -73,6 +78,27 @@ const MenuActionButton: FC<IMenuActionButtonProps> = () => {
           )}
         </Button>
       </ButtonGroup>
+    );
+  };
+
+  const renderIdentitySafeguard = () => {
+    if (userIdentity == null) {
+      return (
+        <Tooltip
+          title={'An identity is required for access to workspaces'}
+          arrow
+        >
+          {renderButtonGroup()}
+        </Tooltip>
+      );
+    } else {
+      return renderButtonGroup();
+    }
+  };
+
+  return (
+    <Fragment>
+      {renderIdentitySafeguard()}
       <Popper
         open={open}
         anchorEl={anchorRef.current}
@@ -81,15 +107,15 @@ const MenuActionButton: FC<IMenuActionButtonProps> = () => {
         disablePortal
       >
         {({ TransitionProps, placement }) => (
-          <Grow
-            {...TransitionProps}
-            style={{
-              transformOrigin:
-                placement === 'bottom' ? 'center top' : 'center bottom'
-            }}
-          >
-            <Paper>
-              <ClickAwayListener onClickAway={handleClose}>
+          <ClickAwayListener onClickAway={handleClose}>
+            <Grow
+              {...TransitionProps}
+              style={{
+                transformOrigin:
+                  placement === 'bottom' ? 'center top' : 'center bottom'
+              }}
+            >
+              <Paper>
                 <Link
                   to={'/workspaces/join'}
                   style={{ textDecoration: 'none' }}
@@ -109,9 +135,9 @@ const MenuActionButton: FC<IMenuActionButtonProps> = () => {
                     </MenuItem>
                   </MenuList>
                 </Link>
-              </ClickAwayListener>
-            </Paper>
-          </Grow>
+              </Paper>
+            </Grow>
+          </ClickAwayListener>
         )}
       </Popper>
     </Fragment>
