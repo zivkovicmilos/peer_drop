@@ -268,9 +268,7 @@ func (sh *StorageHandler) DeleteContact(contact types.Contact) error {
 
 // GetPrimaryIdentity returns the ID of the identity that's primary
 func (sh *StorageHandler) GetPrimaryIdentity() string {
-	entityKeyBase := append(IDENTITY_PRIMARY, delimiter...)
-
-	value, err := sh.db.Get(entityKeyBase, nil)
+	value, err := sh.db.Get(IDENTITY_PRIMARY, nil)
 	if err != nil {
 		return ""
 	}
@@ -281,9 +279,7 @@ func (sh *StorageHandler) GetPrimaryIdentity() string {
 // SetPrimaryIdentity sets the primary identity.
 // Only updates the IDENTITY_PRIMARY keyset
 func (sh *StorageHandler) SetPrimaryIdentity(id string) error {
-	entityKeyBase := append(append(IDENTITY_PRIMARY, delimiter...), []byte(id)...)
-
-	return sh.db.Put(entityKeyBase, []byte(id), nil)
+	return sh.db.Put(IDENTITY_PRIMARY, []byte(id), nil)
 }
 
 // UpdateIdentityPrimary sets a new primary identity
@@ -292,7 +288,6 @@ func (sh *StorageHandler) UpdateIdentityPrimary(id string) error {
 	previousPrimary := sh.GetPrimaryIdentity()
 	if previousPrimary != "" {
 		// Set its isPrimary field to false
-		// TODO fix this
 		entityKeyBase := append(append(IDENTITIES, delimiter...), append([]byte(previousPrimary), delimiter...)...)
 		entityKeyBase = append(entityKeyBase, IDENTITY_IS_PRIMARY...)
 
