@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -59,6 +60,7 @@ var (
 	WORKSPACE_INFO_MNEMONIC               = []byte("mnemonic")
 	WORKSPACE_INFO_WORKSPACE_OWNER        = []byte("workspaceOwner")
 	WORKSPACE_INFO_SECURITY_TYPE          = []byte("securityType")
+	WORKSPACE_INFO_NAME                   = []byte("name")
 	WORKSPACE_INFO_PASSWORD_HASH          = []byte("passwordHash")
 	WORKSPACE_INFO_CONTACT                = []byte("contact")
 	WORKSPACE_INFO_WORKSPACE_OWNER_LIBP2P = []byte("libp2pAddress")
@@ -571,12 +573,102 @@ func (sh *StorageHandler) GetIdentities(
 
 // RENDEZVOUS //
 
+func (sh *StorageHandler) GetWorkspaceInfo(mnemonic string) (*proto.WorkspaceInfo, error) {
+	var foundWorkspaceInfo *proto.WorkspaceInfo
+	foundWorkspaceInfo = nil
+
+	workspaceOwnerMap := make(map[int]*proto.WorkspaceOwner)
+	workspaceContactPKMap := make(map[int]string)
+
+	getWorkspaceOwner := func(index int) *proto.WorkspaceOwner {
+		workspaceOwner, ok := workspaceOwnerMap[index]
+		if !ok {
+			return &proto.WorkspaceOwner{}
+		}
+
+		return workspaceOwner
+	}
+
+	keyBase := append(WORKSPACE_INFO, delimiter...)
+	iter := sh.db.NewIterator(util.BytesPrefix(append(keyBase, []byte(mnemonic)...)), nil)
+	for iter.Next() {
+		if foundWorkspaceInfo == nil {
+			foundWorkspaceInfo = &proto.WorkspaceInfo{Mnemonic: mnemonic}
+		}
+		// workspaceInfo:<mnemonic>:workspaceOwner:<index>:attributeName => value
+		// workspaceInfo:<mnemonic>:contact:<index>:attributeName => value
+		keyParts := strings.Split(string(iter.Key()), ":")
+		attributeName := keyParts[len(keyParts)-1]
+
+		value := string(iter.Value())
+		// These attributes can be extracted in the form
+		// workspaceInfo:mnemonic:attributeName => value
+		switch attributeName {
+		case "name":
+			foundWorkspaceInfo.Name = value
+		case "securityType":
+			foundWorkspaceInfo.SecurityType = value
+		case "passwordHash":
+			foundWorkspaceInfo.SecuritySettings = &proto.WorkspaceInfo_PasswordHash{PasswordHash: value}
+		case "publicKey":
+			index, convErr := strconv.Atoi(keyParts[len(keyParts)-2]) // next to last key value
+			if convErr != nil {
+				return nil, convErr
+			}
+			if string(keyParts[len(keyParts)-3]) == "contact" {
+				workspaceContactPKMap[index] = value
+			} else {
+				ref := getWorkspaceOwner(index)
+				ref.PublicKey = value
+				workspaceOwnerMap[index] = ref
+			}
+		case "libp2pAddress":
+			index, convErr := strconv.Atoi(keyParts[len(keyParts)-2]) // next to last key value
+			if convErr != nil {
+				return nil, convErr
+			}
+			ref := getWorkspaceOwner(index)
+			ref.Libp2PAddress = value
+			workspaceOwnerMap[index] = ref
+		}
+	}
+
+	iter.Release()
+	err := iter.Error()
+
+	// Add the owners to the object
+	foundWorkspaceInfo.WorkspaceOwners = make([]*proto.WorkspaceOwner, 0)
+	for _, workspaceOwner := range workspaceOwnerMap {
+		foundWorkspaceInfo.WorkspaceOwners = append(foundWorkspaceInfo.WorkspaceOwners, workspaceOwner)
+	}
+
+	// Add the contacts if this is the correct security type
+	if foundWorkspaceInfo.SecurityType == "contacts" {
+		contacts := make([]string, 0)
+		for _, contactPK := range workspaceContactPKMap {
+			contacts = append(contacts, contactPK)
+		}
+
+		foundWorkspaceInfo.SecuritySettings = &proto.WorkspaceInfo_ContactsWrapper{
+			ContactsWrapper: &proto.ContactsWrapper{
+				ContactPublicKeys: contacts,
+			},
+		}
+	}
+
+	return foundWorkspaceInfo, err
+}
+
 // CreateWorkspaceInfo stores the workspace info into the rendezvous DB
 func (sh *StorageHandler) CreateWorkspaceInfo(workspaceInfo *proto.WorkspaceInfo) error {
 	fieldPairs := []struct {
 		key   []byte
 		value []byte
 	}{
+		{
+			WORKSPACE_INFO_NAME,
+			[]byte(workspaceInfo.Name),
+		},
 		{
 			WORKSPACE_INFO_SECURITY_TYPE,
 			[]byte(workspaceInfo.SecurityType),
@@ -606,11 +698,8 @@ func (sh *StorageHandler) CreateWorkspaceInfo(workspaceInfo *proto.WorkspaceInfo
 			searchIndex := append(
 				append(entityKeyBase, WORKSPACE_INFO_WORKSPACE_OWNER...), append(delimiter, workspaceOwnerIndex.Bytes()...)...,
 			)
-			foundInfo, findErr := sh.db.Get(searchIndex, nil)
-			if findErr != nil {
-				return findErr
-			}
-			if string(foundInfo) == "" {
+			foundInfo, _ := sh.db.Get(searchIndex, nil)
+			if foundInfo == nil || string(foundInfo) == "" {
 				indexFound = true
 			} else {
 				workspaceOwnerIndex.Add(workspaceOwnerIndex, big.NewInt(1))
@@ -650,9 +739,21 @@ func (sh *StorageHandler) CreateWorkspaceInfo(workspaceInfo *proto.WorkspaceInfo
 		if putError != nil {
 			return putError
 		}
+
+		securityTypeKey := append(entityKeyBase, WORKSPACE_INFO_SECURITY_TYPE...)
+		putError = sh.db.Put(securityTypeKey, []byte("password"), nil)
+		if putError != nil {
+			return putError
+		}
 	} else {
 		// Set the permitted contacts
 		settings := workspaceInfo.SecuritySettings.(*proto.WorkspaceInfo_ContactsWrapper)
+
+		securityTypeKey := append(entityKeyBase, WORKSPACE_INFO_SECURITY_TYPE...)
+		putError := sh.db.Put(securityTypeKey, []byte("contacts"), nil)
+		if putError != nil {
+			return putError
+		}
 
 		if len(settings.ContactsWrapper.ContactPublicKeys) > 0 {
 			contactsIndex := big.NewInt(1)
@@ -663,18 +764,15 @@ func (sh *StorageHandler) CreateWorkspaceInfo(workspaceInfo *proto.WorkspaceInfo
 				searchIndex := append(
 					append(entityKeyBase, WORKSPACE_INFO_CONTACT...), append(delimiter, contactsIndex.Bytes()...)...,
 				)
-				foundInfo, findErr := sh.db.Get(searchIndex, nil)
-				if findErr != nil {
-					return findErr
-				}
-				if string(foundInfo) == "" {
+				foundInfo, _ := sh.db.Get(searchIndex, nil)
+				if foundInfo == nil || string(foundInfo) == "" {
 					indexFound = true
 				} else {
 					contactsIndex.Add(contactsIndex, big.NewInt(1))
 				}
 			}
 
-			// workspaceInfo:<mnemonic>:workspaceOwner:<index>:attributeName => value
+			// workspaceInfo:<mnemonic>:contact:<index>:attributeName => value
 			contactKeybase := append(entityKeyBase, WORKSPACE_INFO_CONTACT...)
 			contactKeybase = append(contactKeybase, delimiter...)
 			for _, contactPublicKey := range settings.ContactsWrapper.ContactPublicKeys {
@@ -683,7 +781,7 @@ func (sh *StorageHandler) CreateWorkspaceInfo(workspaceInfo *proto.WorkspaceInfo
 
 				// public key
 				publicKeyKey := append(key, WORKSPACE_INFO_WORKSPACE_PUBLIC_KEY...)
-				putError := sh.db.Put(publicKeyKey, []byte(contactPublicKey), nil)
+				putError = sh.db.Put(publicKeyKey, []byte(contactPublicKey), nil)
 				if putError != nil {
 					return putError
 				}

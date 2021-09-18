@@ -3,6 +3,7 @@ module github.com/zivkovicmilos/peer_drop
 go 1.16
 
 require (
+	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.8.0
 	github.com/hashicorp/go-hclog v0.16.2

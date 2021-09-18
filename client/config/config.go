@@ -6,6 +6,7 @@ type NodeConfig struct {
 	HttpPort    int
 	GrpcPort    int
 	Libp2pPort  int
+	BaseDir     string
 }
 
 type RendezvousConfig struct {
@@ -14,7 +15,7 @@ type RendezvousConfig struct {
 
 // Default values
 var (
-	ServerHost       = "localhost"
+	ServerHost       = "0.0.0.0"
 	ServerHTTPPort   = 5000 // Used for the UI -> Client REST communication
 	ServerGRPCPort   = 5001 // Used for Client <-> Client RPC communication
 	ServerLibp2pPort = 5002 // Used for Client <-> Client network communication

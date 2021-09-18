@@ -5,13 +5,14 @@ option go_package = "/proto";
 // Exchanged between Rendezvous nodes,
 // as well as between Client and Rendezvous nodes
 message WorkspaceInfo {
-  string mnemonic = 1;
-  repeated WorkspaceOwner workspace_owners = 2;
+  string name = 1;
+  string mnemonic = 2;
+  repeated WorkspaceOwner workspace_owners = 3;
 
-  string security_type = 3;
+  string security_type = 4;
   oneof security_settings {
-    ContactsWrapper contacts_wrapper = 4;
-    string password_hash = 5;
+    ContactsWrapper contacts_wrapper = 5;
+    string password_hash = 6;
   }
 }
 

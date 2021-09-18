@@ -48,6 +48,9 @@ func main() {
 	// ===== BASE SETUP ===== //
 
 	// Set the flags
+	baseDirPtr := flag.String("directory", config.DirectoryBase,
+		fmt.Sprintf("Base directory for the client data. Default %s", config.DirectoryBase),
+	)
 	hostPtr := flag.String("host", config.ServerHost,
 		fmt.Sprintf("Host address of the client. Default %s", config.ServerHost),
 	)
@@ -71,19 +74,8 @@ func main() {
 	flag.Parse()
 
 	// Set up the base directory
-	directoryError := createDirectory(fmt.Sprintf("%s/%s", config.DirectoryBase, config.DirectoryStorage))
+	directoryError := createDirectory(fmt.Sprintf("%s/%s", *baseDirPtr, config.DirectoryStorage))
 	if directoryError != nil {
-		os.Exit(1)
-	}
-
-	// Set up the storage
-	storageHandler := storage.GetStorageHandler()
-	storageHandler.SetLogger(serviceHandler.logger)
-	storageHandler.SetCloseChannel(serviceHandler.registerCloseListener("storageHandler"))
-
-	if storageErr := storage.GetStorageHandler().OpenDB(
-		fmt.Sprintf("%s/%s/", config.DirectoryBase, config.DirectoryStorage),
-	); storageErr != nil {
 		os.Exit(1)
 	}
 
@@ -97,6 +89,17 @@ func main() {
 		Name:  "peer_drop",
 		Level: hclog.LevelFromString("DEBUG"),
 	})
+
+	// Set up the storage
+	storageHandler := storage.GetStorageHandler()
+	storageHandler.SetLogger(serviceHandler.logger)
+	storageHandler.SetCloseChannel(serviceHandler.registerCloseListener("storageHandler"))
+
+	if storageErr := storage.GetStorageHandler().OpenDB(
+		fmt.Sprintf("%s/%s/", *baseDirPtr, config.DirectoryStorage),
+	); storageErr != nil {
+		os.Exit(1)
+	}
 
 	// Set up the close mechanism
 	serviceHandler.closeChannel = make(chan os.Signal, 1)
@@ -113,6 +116,7 @@ func main() {
 		HttpPort:    *httpPortPtr,
 		GrpcPort:    *grpcPortPtr,
 		Libp2pPort:  *libp2pPortPtr,
+		BaseDir:     *baseDirPtr,
 	}
 
 	if *rendezvousMode {
@@ -129,7 +133,7 @@ func main() {
 func setupAsClient(nodeConfig *config.NodeConfig) {
 	// Set up the directories
 	if directoryError := createDirectory(
-		fmt.Sprintf("%s/%s", config.DirectoryBase, config.DirectoryFiles),
+		fmt.Sprintf("%s/%s", nodeConfig.BaseDir, config.DirectoryFiles),
 	); directoryError != nil {
 		os.Exit(1)
 	}
@@ -147,7 +151,7 @@ func setupAsClient(nodeConfig *config.NodeConfig) {
 func setupAsRendezvous(nodeConfig *config.NodeConfig, rendezvousConfig *config.RendezvousConfig) {
 	// Set up the directories
 	if directoryError := createDirectory(
-		fmt.Sprintf("%s/%s", config.DirectoryBase, config.DirectoryLibp2p),
+		fmt.Sprintf("%s/%s", nodeConfig.BaseDir, config.DirectoryLibp2p),
 	); directoryError != nil {
 		os.Exit(1)
 	}

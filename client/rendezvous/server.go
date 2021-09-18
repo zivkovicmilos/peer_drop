@@ -1,13 +1,15 @@
 package rendezvous
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
+	"github.com/golang/protobuf/jsonpb"
 	"github.com/hashicorp/go-hclog"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/host"
@@ -63,7 +65,7 @@ func NewRendezvousServer(
 // Start starts the rendezvous server
 func (r *RendezvousServer) Start(closeChannel chan struct{}) {
 	libp2pKey, keyError := localCrypto.ReadLibp2pKey(
-		filepath.Join(config.DirectoryBase, config.DirectoryLibp2p),
+		filepath.Join(r.nodeConfig.BaseDir, config.DirectoryLibp2p),
 		"libp2p_key.asc",
 	)
 	if keyError != nil {
@@ -74,11 +76,15 @@ func (r *RendezvousServer) Start(closeChannel chan struct{}) {
 	r.ctx = ctx
 	r.cancelFunc = cancelFunc
 
-	defer r.cancelFunc()
-
-	sourceMultiAddr, _ := multiaddr.NewMultiaddr(
+	sourceMultiAddr, multiAddrErr := multiaddr.NewMultiaddr(
 		fmt.Sprintf("/ip4/%s/tcp/%d", r.nodeConfig.HostAddress, r.nodeConfig.Libp2pPort),
 	)
+	if multiAddrErr != nil {
+		r.logger.Error(fmt.Sprintf("Unable to create source multiaddr, %v", multiAddrErr))
+
+		cancelFunc()
+		os.Exit(1)
+	}
 
 	rendezvousHost, err := libp2p.New(
 		ctx,
@@ -91,6 +97,11 @@ func (r *RendezvousServer) Start(closeChannel chan struct{}) {
 		cancelFunc()
 		os.Exit(1)
 	}
+
+	defer func() {
+		r.cancelFunc()
+		_ = rendezvousHost.Close()
+	}()
 
 	_, err = dht.New(ctx, rendezvousHost)
 	if err != nil {
@@ -121,8 +132,58 @@ func (r *RendezvousServer) Start(closeChannel chan struct{}) {
 		os.Exit(1)
 	}
 
+	// TODO remove
+	//go r.statusDummy()
+	//c1 := make(chan string, 1)
+	//go func() {
+	//	time.Sleep(10 * time.Second)
+	//	c1 <- "result 1"
+	//}()
+	//select {
+	//case res := <-c1:
+	//	fmt.Println(res)
+	//	r.sendDummyMessage() // TODO remove
+	//}
+
 	// Wait for a close signal
 	<-closeChannel
+}
+
+func (r *RendezvousServer) statusDummy() {
+	timeout := time.NewTicker(time.Second * 1)
+
+	for {
+		_ = <-timeout.C
+		r.logger.Info(fmt.Sprintf("I have %d peers", len(r.pubSub.ListPeers(rendezvousTopic))))
+	}
+}
+
+func (r *RendezvousServer) sendDummyMessage() {
+	m := &proto.WorkspaceInfo{
+		Mnemonic: "mymnemonic",
+		WorkspaceOwners: []*proto.WorkspaceOwner{
+			{
+				PublicKey:     "public",
+				Libp2PAddress: "libp2p",
+			},
+		},
+		SecurityType:     "password",
+		SecuritySettings: &proto.WorkspaceInfo_PasswordHash{PasswordHash: "passwordHash"},
+	}
+
+	marshaler := jsonpb.Marshaler{}
+	buf := new(bytes.Buffer)
+	err := marshaler.Marshal(buf, m)
+	if err != nil {
+		r.logger.Info("INVALID MARSHAL")
+	}
+
+	sendErr := r.pubSubTopic.Publish(r.ctx, buf.Bytes())
+	if sendErr != nil {
+		r.logger.Info("INVALID SEND")
+	}
+
+	r.logger.Info("MESSAGE SENT")
 }
 
 // connectToRendezvousPeers attempts to connect to other rendezvous nodes
@@ -143,7 +204,7 @@ func (r *RendezvousServer) connectToRendezvousPeers(host host.Host, ctx context.
 			if connectErr := host.Connect(ctx, *peerinfo); connectErr != nil {
 				r.logger.Error(fmt.Sprintf("Unable to connect to peer: %s", peerinfo.String()))
 			} else {
-				r.logger.Info(fmt.Sprintf("Connection extablished to rendezvous node: %s", peerinfo.String()))
+				r.logger.Info(fmt.Sprintf("Connection established to rendezvous node: %s", peerinfo.String()))
 			}
 		}()
 	}
@@ -188,6 +249,8 @@ func (r *RendezvousServer) readPubsubLoop() {
 	for {
 		workspaceInfoMsg, err := r.pubSubSubscription.Next(r.ctx)
 		if err != nil {
+			r.logger.Error(fmt.Sprintf("Unable to parse message, %v", err))
+
 			close(r.workspaceInfoMsgQueue)
 			return
 		}
@@ -198,8 +261,9 @@ func (r *RendezvousServer) readPubsubLoop() {
 		}
 
 		workspaceInfo := new(proto.WorkspaceInfo)
-		err = json.Unmarshal(workspaceInfoMsg.Data, workspaceInfo)
+		err = jsonpb.Unmarshal(bytes.NewReader(workspaceInfoMsg.Data), workspaceInfo)
 		if err != nil {
+			r.logger.Error(fmt.Sprintf("Unmarshal error %v", err))
 			continue
 		}
 
