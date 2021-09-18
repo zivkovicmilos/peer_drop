@@ -9,6 +9,7 @@ require (
 	github.com/libp2p/go-libp2p v0.15.0
 	github.com/libp2p/go-libp2p-core v0.9.0
 	github.com/libp2p/go-libp2p-kad-dht v0.13.1
+	github.com/libp2p/go-libp2p-pubsub v0.5.4
 	github.com/multiformats/go-multiaddr v0.4.0
 	github.com/rs/cors v1.8.0
 	github.com/syndtr/goleveldb v1.0.0
@@ -17,4 +18,5 @@ require (
 	golang.org/x/net v0.0.0-20210917163549-3c21e5b27794 // indirect
 	golang.org/x/sys v0.0.0-20210917161153-d61c044b1678 // indirect
 	golang.org/x/tools v0.1.5 // indirect
+	google.golang.org/protobuf v1.27.1 // indirect
 )

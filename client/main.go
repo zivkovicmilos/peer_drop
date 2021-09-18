@@ -31,7 +31,7 @@ func (rn *RendezvousNodes) String() string {
 	return formatArray(*rn)
 }
 
-func formatArray(array []string) string {
+func formatArray(array RendezvousNodes) string {
 	return "(" + strings.Join(array, ",") + ")"
 }
 
@@ -39,6 +39,7 @@ func (rn *RendezvousNodes) Set(value string) error {
 	if _, err := multiaddr.NewMultiaddr(value); err != nil {
 		return err
 	}
+
 	*rn = append(*rn, value)
 	return nil
 }

@@ -2,6 +2,7 @@ package storage
 
 import (
 	"bytes"
+	"fmt"
 	"math/big"
 	"sort"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/hashicorp/go-hclog"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/util"
+	"github.com/zivkovicmilos/peer_drop/proto"
 	"github.com/zivkovicmilos/peer_drop/rest/types"
 	"github.com/zivkovicmilos/peer_drop/rest/utils"
 )
@@ -29,6 +31,7 @@ var (
 	WORKSPACES = []byte("workspaces")
 
 	IDENTITY_PRIMARY = []byte("identityPrimary")
+	WORKSPACE_INFO   = []byte("workspaceInfo")
 )
 
 // Sub-prefixes
@@ -42,6 +45,7 @@ var (
 	CONTACT_PUBLIC_KEY_ID = []byte("publicKeyID")
 
 	// IDENTITIES //
+
 	IDENTITY_NAME           = []byte("name")
 	IDENTITY_PICTURE        = []byte("picture")
 	IDENTITY_DATE_CREATED   = []byte("dateCreated")
@@ -50,6 +54,15 @@ var (
 	IDENTITY_PUBLIC_KEY_ID  = []byte("publicKeyID")
 	IDENTITY_IS_PRIMARY     = []byte("isPrimary")
 	IDENTITY_NUM_WORKSPACES = []byte("numWorkspaces")
+
+	// RENDEZVOUS NODES //
+	WORKSPACE_INFO_MNEMONIC               = []byte("mnemonic")
+	WORKSPACE_INFO_WORKSPACE_OWNER        = []byte("workspaceOwner")
+	WORKSPACE_INFO_SECURITY_TYPE          = []byte("securityType")
+	WORKSPACE_INFO_PASSWORD_HASH          = []byte("passwordHash")
+	WORKSPACE_INFO_CONTACT                = []byte("contact")
+	WORKSPACE_INFO_WORKSPACE_OWNER_LIBP2P = []byte("libp2pAddress")
+	WORKSPACE_INFO_WORKSPACE_PUBLIC_KEY   = []byte("publicKey")
 )
 
 type StorageHandler struct {
@@ -220,8 +233,7 @@ func (sh *StorageHandler) CreateContact(contact types.Contact) error {
 
 	entityKeyBase := append(append(CONTACTS, delimiter...), append([]byte(contact.ID), delimiter...)...)
 	for _, field := range fieldPairs {
-		colonSeparated := append(entityKeyBase, delimiter...)
-		putError := sh.db.Put(append(colonSeparated, field.key...), field.value, nil)
+		putError := sh.db.Put(append(entityKeyBase, field.key...), field.value, nil)
 		if putError != nil {
 			return putError
 		}
@@ -254,8 +266,7 @@ func (sh *StorageHandler) DeleteContact(contact types.Contact) error {
 
 	entityKeyBase := append(append(CONTACTS, delimiter...), append([]byte(contact.ID), delimiter...)...)
 	for _, field := range fieldPairs {
-		colonSeparated := append(entityKeyBase, delimiter...)
-		deleteError := sh.db.Delete(append(colonSeparated, field.key...), nil)
+		deleteError := sh.db.Delete(append(entityKeyBase, field.key...), nil)
 		if deleteError != nil {
 			return deleteError
 		}
@@ -367,8 +378,7 @@ func (sh *StorageHandler) CreateIdentity(identity types.Identity) error {
 
 	entityKeyBase := append(append(IDENTITIES, delimiter...), append([]byte(identity.ID), delimiter...)...)
 	for _, field := range fieldPairs {
-		colonSeparated := append(entityKeyBase, delimiter...)
-		putError := sh.db.Put(append(colonSeparated, field.key...), field.value, nil)
+		putError := sh.db.Put(append(entityKeyBase, field.key...), field.value, nil)
 		if putError != nil {
 			return putError
 		}
@@ -411,8 +421,7 @@ func (sh *StorageHandler) DeleteIdentity(identity types.Identity) error {
 
 	entityKeyBase := append(append(IDENTITIES, delimiter...), append([]byte(identity.ID), delimiter...)...)
 	for _, field := range fieldPairs {
-		colonSeparated := append(entityKeyBase, delimiter...)
-		deleteError := sh.db.Delete(append(colonSeparated, field.key...), nil)
+		deleteError := sh.db.Delete(append(entityKeyBase, field.key...), nil)
 		if deleteError != nil {
 			return deleteError
 		}
@@ -558,4 +567,131 @@ func (sh *StorageHandler) GetIdentities(
 	}
 
 	return foundIdentities, totalIdentities, err
+}
+
+// RENDEZVOUS //
+
+// CreateWorkspaceInfo stores the workspace info into the rendezvous DB
+func (sh *StorageHandler) CreateWorkspaceInfo(workspaceInfo *proto.WorkspaceInfo) error {
+	fieldPairs := []struct {
+		key   []byte
+		value []byte
+	}{
+		{
+			WORKSPACE_INFO_SECURITY_TYPE,
+			[]byte(workspaceInfo.SecurityType),
+		},
+	}
+
+	// Set the base fields
+	entityKeyBase := append(append(WORKSPACE_INFO, delimiter...), append([]byte(workspaceInfo.Mnemonic), delimiter...)...)
+	for _, field := range fieldPairs {
+		putError := sh.db.Put(append(entityKeyBase, field.key...), field.value, nil)
+		if putError != nil {
+			return putError
+		}
+	}
+
+	// Set the workspace owners
+	if len(workspaceInfo.WorkspaceOwners) > 0 {
+		workspaceOwnerIndex := big.NewInt(1)
+		indexFound := false
+		for !indexFound {
+			if workspaceOwnerIndex.Int64() > 10 {
+				return fmt.Errorf("invalid number of workspace owners")
+			}
+
+			// Search index is
+			// workspaceInfo:<mnemonic>:workspaceOwner:<index>
+			searchIndex := append(
+				append(entityKeyBase, WORKSPACE_INFO_WORKSPACE_OWNER...), append(delimiter, workspaceOwnerIndex.Bytes()...)...,
+			)
+			foundInfo, findErr := sh.db.Get(searchIndex, nil)
+			if findErr != nil {
+				return findErr
+			}
+			if string(foundInfo) == "" {
+				indexFound = true
+			} else {
+				workspaceOwnerIndex.Add(workspaceOwnerIndex, big.NewInt(1))
+			}
+		}
+
+		// workspaceInfo:<mnemonic>:workspaceOwner:<index>:attributeName => value
+		workspaceOwnerKeybase := append(entityKeyBase, WORKSPACE_INFO_WORKSPACE_OWNER...)
+		workspaceOwnerKeybase = append(workspaceOwnerKeybase, delimiter...)
+		for _, workspaceOwner := range workspaceInfo.WorkspaceOwners {
+			key := append(workspaceOwnerKeybase, workspaceOwnerIndex.Bytes()...)
+			key = append(key, delimiter...)
+
+			// libp2p address
+			libp2pAddressKey := append(key, WORKSPACE_INFO_WORKSPACE_OWNER_LIBP2P...)
+			putError := sh.db.Put(libp2pAddressKey, []byte(workspaceOwner.Libp2PAddress), nil)
+			if putError != nil {
+				return putError
+			}
+
+			// public key
+			publicKeyKey := append(key, WORKSPACE_INFO_WORKSPACE_PUBLIC_KEY...)
+			putError = sh.db.Put(publicKeyKey, []byte(workspaceOwner.PublicKey), nil)
+			if putError != nil {
+				return putError
+			}
+
+			workspaceOwnerIndex.Add(workspaceOwnerIndex, big.NewInt(1))
+		}
+	}
+
+	if workspaceInfo.SecurityType == "password" {
+		// Set the password hash
+		settings := workspaceInfo.SecuritySettings.(*proto.WorkspaceInfo_PasswordHash)
+		putError := sh.db.Put(append(entityKeyBase, WORKSPACE_INFO_PASSWORD_HASH...),
+			[]byte(settings.PasswordHash), nil)
+		if putError != nil {
+			return putError
+		}
+	} else {
+		// Set the permitted contacts
+		settings := workspaceInfo.SecuritySettings.(*proto.WorkspaceInfo_ContactsWrapper)
+
+		if len(settings.ContactsWrapper.ContactPublicKeys) > 0 {
+			contactsIndex := big.NewInt(1)
+			indexFound := false
+			for !indexFound {
+				// Search index is
+				// workspaceInfo:<mnemonic>:contact:<index>
+				searchIndex := append(
+					append(entityKeyBase, WORKSPACE_INFO_CONTACT...), append(delimiter, contactsIndex.Bytes()...)...,
+				)
+				foundInfo, findErr := sh.db.Get(searchIndex, nil)
+				if findErr != nil {
+					return findErr
+				}
+				if string(foundInfo) == "" {
+					indexFound = true
+				} else {
+					contactsIndex.Add(contactsIndex, big.NewInt(1))
+				}
+			}
+
+			// workspaceInfo:<mnemonic>:workspaceOwner:<index>:attributeName => value
+			contactKeybase := append(entityKeyBase, WORKSPACE_INFO_CONTACT...)
+			contactKeybase = append(contactKeybase, delimiter...)
+			for _, contactPublicKey := range settings.ContactsWrapper.ContactPublicKeys {
+				key := append(contactKeybase, contactsIndex.Bytes()...)
+				key = append(key, delimiter...)
+
+				// public key
+				publicKeyKey := append(key, WORKSPACE_INFO_WORKSPACE_PUBLIC_KEY...)
+				putError := sh.db.Put(publicKeyKey, []byte(contactPublicKey), nil)
+				if putError != nil {
+					return putError
+				}
+
+				contactsIndex.Add(contactsIndex, big.NewInt(1))
+			}
+		}
+	}
+
+	return nil
 }
