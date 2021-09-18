@@ -13,35 +13,30 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/hashicorp/go-hclog"
 	"github.com/rs/cors"
+	"github.com/zivkovicmilos/peer_drop/config"
 	"github.com/zivkovicmilos/peer_drop/rest/contacts"
 	"github.com/zivkovicmilos/peer_drop/rest/crypto"
 	"github.com/zivkovicmilos/peer_drop/rest/identities"
 	"github.com/zivkovicmilos/peer_drop/storage"
 )
 
-var (
-	serverHost = "localhost"
-	serverPort = 5000
-)
-
 type Dispatcher struct {
-	logger  hclog.Logger
-	router  *mux.Router
-	server  *http.Server
-	storage *storage.StorageHandler
+	logger     hclog.Logger
+	nodeConfig *config.NodeConfig
+	router     *mux.Router
+	server     *http.Server
+	storage    *storage.StorageHandler
 }
 
 // NewDispatcher returns a new instance of the dispatcher
-func NewDispatcher(logger hclog.Logger, storage *storage.StorageHandler) *Dispatcher {
+func NewDispatcher(
+	logger hclog.Logger,
+	nodeConfig *config.NodeConfig,
+) *Dispatcher {
 	return &Dispatcher{
-		logger:  logger.Named("dispatcher"),
-		storage: storage,
+		logger:     logger.Named("dispatcher"),
+		nodeConfig: nodeConfig,
 	}
-}
-
-// GetStorageHandler returns the reference to the storage handler
-func (d *Dispatcher) GetStorageHandler() *storage.StorageHandler {
-	return d.storage
 }
 
 // commonMiddleware defines a middleware that all requests go through
@@ -87,7 +82,7 @@ func (d *Dispatcher) Start(closeChannel chan struct{}) {
 	}()
 
 	d.logger.Info(
-		fmt.Sprintf("HTTP server started on: %s:%d", serverHost, serverPort),
+		fmt.Sprintf("HTTP server started on: %s:%d", d.nodeConfig.HostAddress, d.nodeConfig.HttpPort),
 	)
 
 	<-closeChannel
@@ -109,7 +104,7 @@ func (d *Dispatcher) Start(closeChannel chan struct{}) {
 func (d *Dispatcher) setupServer(handler http.Handler) {
 
 	d.server = &http.Server{
-		Addr:         fmt.Sprintf("%s:%d", serverHost, serverPort),
+		Addr:         fmt.Sprintf("%s:%d", d.nodeConfig.HostAddress, d.nodeConfig.HttpPort),
 		WriteTimeout: time.Second * 15,
 		ReadTimeout:  time.Second * 15,
 		Handler:      handler,

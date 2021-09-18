@@ -32,7 +32,7 @@ func CreateIdentity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	publicKeyEncoded, encodeErr := crypto.EncodePublicKey(privateKey.PublicKey.PublicKey.(*rsa.PublicKey))
+	publicKeyEncoded, encodeErr := crypto.EncodePublicKeyStr(privateKey.PublicKey.PublicKey.(*rsa.PublicKey))
 	if encodeErr != nil {
 		http.Error(w, "Unable to encode public key", http.StatusInternalServerError)
 		return
@@ -145,7 +145,7 @@ func UpdateIdentity(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		publicKeyEncoded, encodeErr := crypto.EncodePublicKey(privateKey.PublicKey.PublicKey.(*rsa.PublicKey))
+		publicKeyEncoded, encodeErr := crypto.EncodePublicKeyStr(privateKey.PublicKey.PublicKey.(*rsa.PublicKey))
 		if encodeErr != nil {
 			http.Error(w, "Unable to encode public key", http.StatusInternalServerError)
 			return

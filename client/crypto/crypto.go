@@ -2,14 +2,20 @@ package crypto
 
 import (
 	"bytes"
+	"crypto/rand"
 	"crypto/rsa"
+	"crypto/x509"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
 
+	libp2pCrypto "github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/zivkovicmilos/peer_drop/rest/types"
 	"golang.org/x/crypto/openpgp"
 	"golang.org/x/crypto/openpgp/armor"
@@ -43,7 +49,12 @@ func ParseRsaPublicKeyFromPemStr(pubPEM string) (*packet.PublicKey, error) {
 
 // ParsePrivateKeyFromPemStr parses a PEM formatted private key
 func ParsePrivateKeyFromPemStr(privPEM string) (*packet.PrivateKey, error) {
-	block, err := armor.Decode(strings.NewReader(privPEM))
+	return parsePrivateKey(strings.NewReader(privPEM))
+}
+
+// parsePrivateKey parses the private key from the specified input
+func parsePrivateKey(inputReader io.Reader) (*packet.PrivateKey, error) {
+	block, err := armor.Decode(inputReader)
 	if err != nil {
 		return nil, fmt.Errorf("unable to decode armor, %v", err)
 	}
@@ -66,46 +77,79 @@ func ParsePrivateKeyFromPemStr(privPEM string) (*packet.PrivateKey, error) {
 	return key, nil
 }
 
+// ReadPrivateKey reads the private key from the specified file path
+func ReadPrivateKey(dataDir string, keyFileName string) (*packet.PrivateKey, error) {
+	in, openErr := os.Open(filepath.Join(dataDir, keyFileName))
+	defer in.Close()
+	if openErr != nil {
+		return nil, fmt.Errorf("Unable to open key file, %v", openErr)
+	}
+
+	return parsePrivateKey(in)
+}
+
 // EncodePrivateKey returns the PEM private key block
-func EncodePrivateKey(key *rsa.PrivateKey) (string, error) {
-	buf := new(bytes.Buffer)
-	w, err := armor.Encode(buf, openpgp.PrivateKeyType, make(map[string]string))
+func EncodePrivateKey(output io.Writer, key *rsa.PrivateKey) error {
+	w, err := armor.Encode(output, openpgp.PrivateKeyType, make(map[string]string))
 	if err != nil {
-		return "", fmt.Errorf("unable to encode armor, %v", err)
+		return fmt.Errorf("unable to encode armor, %v", err)
 	}
 
 	pgpKey := packet.NewRSAPrivateKey(time.Now(), key)
 	err = pgpKey.Serialize(w)
 	if err != nil {
-		return "", fmt.Errorf("unable to serialize private key, %v", err)
+		return fmt.Errorf("unable to serialize private key, %v", err)
 	}
 	err = w.Close()
 	if err != nil {
-		return "", fmt.Errorf("unable to serialize private key, %v", err)
+		return fmt.Errorf("unable to serialize private key, %v", err)
+	}
+
+	return nil
+}
+
+// EncodePrivateKeyStr is a wrapper function for converting a private key object to a PEM block string
+func EncodePrivateKeyStr(key *rsa.PrivateKey) (string, error) {
+	buf := new(bytes.Buffer)
+
+	encodeErr := EncodePrivateKey(buf, key)
+	if encodeErr != nil {
+		return "", encodeErr
+	}
+
+	return buf.String(), nil
+}
+
+// EncodePublicKeyStr is a wrapper function for converting a public key object to a PEM block string
+func EncodePublicKeyStr(key *rsa.PublicKey) (string, error) {
+	buf := new(bytes.Buffer)
+
+	encodeErr := EncodePublicKey(buf, key)
+	if encodeErr != nil {
+		return "", encodeErr
 	}
 
 	return buf.String(), nil
 }
 
 // EncodePublicKey returns the PEM public key block
-func EncodePublicKey(key *rsa.PublicKey) (string, error) {
-	buf := new(bytes.Buffer)
-	w, err := armor.Encode(buf, openpgp.PublicKeyType, make(map[string]string))
+func EncodePublicKey(output io.Writer, key *rsa.PublicKey) error {
+	w, err := armor.Encode(output, openpgp.PublicKeyType, make(map[string]string))
 	if err != nil {
-		return "", fmt.Errorf("unable to encode armor, %v", err)
+		return fmt.Errorf("unable to encode armor, %v", err)
 	}
 
 	pgpKey := packet.NewRSAPublicKey(time.Now(), key)
 	err = pgpKey.Serialize(w)
 	if err != nil {
-		return "", fmt.Errorf("unable to serialize public key, %v", err)
+		return fmt.Errorf("unable to serialize public key, %v", err)
 	}
 	err = w.Close()
 	if err != nil {
-		return "", fmt.Errorf("unable to serialize public key, %v", err)
+		return fmt.Errorf("unable to serialize public key, %v", err)
 	}
 
-	return buf.String(), nil
+	return nil
 }
 
 // GetEmailFromPublicKey extracts the email address from the public key identity
@@ -193,4 +237,54 @@ func GetKeyID(modulus []byte, long bool) string {
 	last4Bytes := modulus[len(modulus)-size:]
 
 	return strings.ToUpper(hex.EncodeToString(last4Bytes))
+}
+
+// ReadLibp2pKey reads the libp2p private key from the passed in directory,
+// or creates it if it doesn't exist
+func ReadLibp2pKey(dataDir string, keyFileName string) (libp2pCrypto.PrivKey, error) {
+	path := filepath.Join(dataDir, keyFileName)
+	_, err := os.Stat(path)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("unable to stat file %s, %v", path, err)
+	}
+
+	if os.IsNotExist(err) {
+		// Key doesn't exist yet, generate it
+		privKey, generateErr := rsa.GenerateKey(rand.Reader, 2048)
+		if generateErr != nil {
+			return nil, fmt.Errorf("unable to generate private key, %v", generateErr)
+		}
+
+		privKeyFile, fileErr := os.Create(filepath.Join(dataDir, keyFileName))
+		defer privKeyFile.Close()
+		if fileErr != nil {
+			return nil, fmt.Errorf("unable to generate private key file, %v", fileErr)
+		}
+
+		encodeErr := EncodePrivateKey(privKeyFile, privKey)
+		if encodeErr != nil {
+			return nil, fmt.Errorf("unable to encode private key, %v", encodeErr)
+		}
+
+		return rsaPrivToLibp2pPriv(privKey)
+	}
+
+	// Key exists, read it from the disk
+	privKey, readErr := ReadPrivateKey(dataDir, keyFileName)
+	if readErr != nil {
+		return nil, fmt.Errorf("unable to read private key file, %v", readErr)
+	}
+
+	return rsaPrivToLibp2pPriv(privKey.PrivateKey.(*rsa.PrivateKey))
+}
+
+// rsaPrivToLibp2pPriv does a conversion to the libp2p crypto standard
+func rsaPrivToLibp2pPriv(key *rsa.PrivateKey) (libp2pCrypto.PrivKey, error) {
+	keyBytes := x509.MarshalPKCS1PrivateKey(key)
+	result, unmarshalError := libp2pCrypto.UnmarshalRsaPrivateKey(keyBytes)
+	if unmarshalError != nil {
+		return nil, fmt.Errorf("unable to unmarshal rsa private key, %v", unmarshalError)
+	}
+
+	return result, nil
 }
