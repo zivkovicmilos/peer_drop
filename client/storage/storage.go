@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/big"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -98,7 +97,7 @@ func (sh *StorageHandler) SetCloseChannel(closeChannel chan struct{}) {
 
 // OpenDB sets the storage handler's logger
 func (sh *StorageHandler) OpenDB(directory string) error {
-	db, err := leveldb.OpenFile(directory, nil) // TODO check of if exists
+	db, err := leveldb.OpenFile(directory, nil)
 	if err != nil {
 		return err
 	}
@@ -611,25 +610,21 @@ func (sh *StorageHandler) GetWorkspaceInfo(mnemonic string) (*proto.WorkspaceInf
 		case "passwordHash":
 			foundWorkspaceInfo.SecuritySettings = &proto.WorkspaceInfo_PasswordHash{PasswordHash: value}
 		case "publicKey":
-			index, convErr := strconv.Atoi(keyParts[len(keyParts)-2]) // next to last key value
-			if convErr != nil {
-				return nil, convErr
-			}
+			bigIndex := big.NewInt(0).SetBytes([]byte(keyParts[len(keyParts)-2])) // next to last key value
+			intIndex := int(bigIndex.Int64())
 			if string(keyParts[len(keyParts)-3]) == "contact" {
-				workspaceContactPKMap[index] = value
+				workspaceContactPKMap[intIndex] = value
 			} else {
-				ref := getWorkspaceOwner(index)
+				ref := getWorkspaceOwner(intIndex)
 				ref.PublicKey = value
-				workspaceOwnerMap[index] = ref
+				workspaceOwnerMap[intIndex] = ref
 			}
 		case "libp2pAddress":
-			index, convErr := strconv.Atoi(keyParts[len(keyParts)-2]) // next to last key value
-			if convErr != nil {
-				return nil, convErr
-			}
-			ref := getWorkspaceOwner(index)
+			bigIndex := big.NewInt(0).SetBytes([]byte(keyParts[len(keyParts)-2])) // next to last key value
+			intIndex := int(bigIndex.Int64())
+			ref := getWorkspaceOwner(intIndex)
 			ref.Libp2PAddress = value
-			workspaceOwnerMap[index] = ref
+			workspaceOwnerMap[intIndex] = ref
 		}
 	}
 
@@ -710,7 +705,7 @@ func (sh *StorageHandler) CreateWorkspaceInfo(workspaceInfo *proto.WorkspaceInfo
 		workspaceOwnerKeybase := append(entityKeyBase, WORKSPACE_INFO_WORKSPACE_OWNER...)
 		workspaceOwnerKeybase = append(workspaceOwnerKeybase, delimiter...)
 		for _, workspaceOwner := range workspaceInfo.WorkspaceOwners {
-			key := append(workspaceOwnerKeybase, workspaceOwnerIndex.Bytes()...)
+			key := append(workspaceOwnerKeybase, []byte(workspaceOwnerIndex.String())...)
 			key = append(key, delimiter...)
 
 			// libp2p address
@@ -776,7 +771,7 @@ func (sh *StorageHandler) CreateWorkspaceInfo(workspaceInfo *proto.WorkspaceInfo
 			contactKeybase := append(entityKeyBase, WORKSPACE_INFO_CONTACT...)
 			contactKeybase = append(contactKeybase, delimiter...)
 			for _, contactPublicKey := range settings.ContactsWrapper.ContactPublicKeys {
-				key := append(contactKeybase, contactsIndex.Bytes()...)
+				key := append(contactKeybase, []byte(contactsIndex.String())...)
 				key = append(key, delimiter...)
 
 				// public key
