@@ -1,4 +1,4 @@
-package rest
+package dispatcher
 
 import (
 	"context"
@@ -17,6 +17,7 @@ import (
 	"github.com/zivkovicmilos/peer_drop/rest/contacts"
 	"github.com/zivkovicmilos/peer_drop/rest/crypto"
 	"github.com/zivkovicmilos/peer_drop/rest/identities"
+	"github.com/zivkovicmilos/peer_drop/rest/workspaces"
 	"github.com/zivkovicmilos/peer_drop/storage"
 )
 
@@ -156,6 +157,9 @@ func (d *Dispatcher) registerEndpoints() {
 	d.router.HandleFunc("/api/crypto/validate-public-key", crypto.ValidatePublicKey).Methods("POST")
 	d.router.HandleFunc("/api/crypto/validate-private-key", crypto.ValidatePrivateKey).Methods("POST")
 	d.router.HandleFunc("/api/crypto/generate-key-pair", crypto.GenerateKeyPair).Methods("POST")
+
+	// Workspaces
+	d.router.HandleFunc("/api/workspaces", workspaces.CreateWorkspace).Methods("POST")
 
 	// Shutdown handler
 	d.router.HandleFunc("/api/shutdown", ShutdownHandler).Methods("POST")

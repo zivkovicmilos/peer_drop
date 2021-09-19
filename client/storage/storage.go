@@ -59,14 +59,21 @@ var (
 	IDENTITY_NUM_WORKSPACES = []byte("numWorkspaces")
 
 	// RENDEZVOUS NODES //
-	WORKSPACE_INFO_MNEMONIC               = []byte("mnemonic")
-	WORKSPACE_INFO_WORKSPACE_OWNER        = []byte("workspaceOwner")
-	WORKSPACE_INFO_SECURITY_TYPE          = []byte("securityType")
-	WORKSPACE_INFO_NAME                   = []byte("name")
-	WORKSPACE_INFO_PASSWORD_HASH          = []byte("passwordHash")
-	WORKSPACE_INFO_CONTACT                = []byte("contact")
-	WORKSPACE_INFO_WORKSPACE_OWNER_LIBP2P = []byte("libp2pAddress")
-	WORKSPACE_INFO_WORKSPACE_PUBLIC_KEY   = []byte("publicKey")
+	WORKSPACE_INFO_MNEMONIC             = []byte("mnemonic")
+	WORKSPACE_INFO_TYPE                 = []byte("type")
+	WORKSPACE_INFO_WORKSPACE_OWNER      = []byte("workspaceOwner")
+	WORKSPACE_INFO_SECURITY_TYPE        = []byte("securityType")
+	WORKSPACE_INFO_NAME                 = []byte("name")
+	WORKSPACE_INFO_PASSWORD_HASH        = []byte("passwordHash")
+	WORKSPACE_INFO_CONTACT              = []byte("contact")
+	WORKSPACE_INFO_WORKSPACE_PUBLIC_KEY = []byte("publicKey")
+)
+
+// Indexes //
+var (
+	// identityPublicKeyIndex:<publicKeyID> => identityId
+
+	IDENTITY_PUBLIC_KEY_INDEX = []byte("identityPublicKey")
 )
 
 type StorageHandler struct {
@@ -281,6 +288,20 @@ func (sh *StorageHandler) DeleteContact(contact types.Contact) error {
 
 // IDENTITIES //
 
+// GetIdentityByPublicKeyID fetches an identity based on the public key ID
+func (sh *StorageHandler) GetIdentityByPublicKeyID(publicKeyID string) (*types.Identity, error) {
+
+	// Get index
+	// identityPublicKeyIndex:<publicKeyID> => identityId
+	entityKeyBase := append(append(IDENTITY_PUBLIC_KEY_INDEX, delimiter...), []byte(publicKeyID)...)
+	foundIdentityID, err := sh.db.Get(entityKeyBase, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return sh.GetIdentity(string(foundIdentityID))
+}
+
 // GetPrimaryIdentity returns the ID of the identity that's primary
 func (sh *StorageHandler) GetPrimaryIdentity() string {
 	value, err := sh.db.Get(IDENTITY_PRIMARY, nil)
@@ -388,6 +409,14 @@ func (sh *StorageHandler) CreateIdentity(identity types.Identity) error {
 		}
 	}
 
+	// Update index
+	// identityPublicKeyIndex:<publicKeyID> => identityId
+	entityKeyBase = append(append(IDENTITY_PUBLIC_KEY_INDEX, delimiter...), []byte(identity.PublicKeyID)...)
+	putError := sh.db.Put(entityKeyBase, []byte(identity.ID), nil)
+	if putError != nil {
+		return putError
+	}
+
 	return nil
 }
 
@@ -429,6 +458,14 @@ func (sh *StorageHandler) DeleteIdentity(identity types.Identity) error {
 		if deleteError != nil {
 			return deleteError
 		}
+	}
+
+	// Update index
+	// identityPublicKeyIndex:<publicKeyID> => identityId
+	entityKeyBase = append(append(IDENTITY_PUBLIC_KEY_INDEX, delimiter...), []byte(identity.PublicKeyID)...)
+	deleteError := sh.db.Delete(entityKeyBase, nil)
+	if deleteError != nil {
+		return deleteError
 	}
 
 	// TODO Update the primary identity if primary is deleted
@@ -579,17 +616,8 @@ func (sh *StorageHandler) GetWorkspaceInfo(mnemonic string) (*proto.WorkspaceInf
 	var foundWorkspaceInfo *proto.WorkspaceInfo
 	foundWorkspaceInfo = nil
 
-	workspaceOwnerMap := make(map[int]*proto.WorkspaceOwner)
+	workspaceOwnerPKMap := make(map[int]string)
 	workspaceContactPKMap := make(map[int]string)
-
-	getWorkspaceOwner := func(index int) *proto.WorkspaceOwner {
-		workspaceOwner, ok := workspaceOwnerMap[index]
-		if !ok {
-			return &proto.WorkspaceOwner{}
-		}
-
-		return workspaceOwner
-	}
 
 	keyBase := append(WORKSPACE_INFO, delimiter...)
 	iter := sh.db.NewIterator(util.BytesPrefix(append(keyBase, []byte(mnemonic)...)), nil)
@@ -610,6 +638,8 @@ func (sh *StorageHandler) GetWorkspaceInfo(mnemonic string) (*proto.WorkspaceInf
 			foundWorkspaceInfo.Name = value
 		case "securityType":
 			foundWorkspaceInfo.SecurityType = value
+		case "type":
+			foundWorkspaceInfo.WorkspaceType = value
 		case "passwordHash":
 			foundWorkspaceInfo.SecuritySettings = &proto.WorkspaceInfo_PasswordHash{PasswordHash: value}
 		case "publicKey":
@@ -618,16 +648,8 @@ func (sh *StorageHandler) GetWorkspaceInfo(mnemonic string) (*proto.WorkspaceInf
 			if string(keyParts[len(keyParts)-3]) == "contact" {
 				workspaceContactPKMap[intIndex] = value
 			} else {
-				ref := getWorkspaceOwner(intIndex)
-				ref.PublicKey = value
-				workspaceOwnerMap[intIndex] = ref
+				workspaceOwnerPKMap[intIndex] = value
 			}
-		case "libp2pAddress":
-			bigIndex := big.NewInt(0).SetBytes([]byte(keyParts[len(keyParts)-2])) // next to last key value
-			intIndex := int(bigIndex.Int64())
-			ref := getWorkspaceOwner(intIndex)
-			ref.Libp2PAddress = value
-			workspaceOwnerMap[intIndex] = ref
 		}
 	}
 
@@ -635,9 +657,9 @@ func (sh *StorageHandler) GetWorkspaceInfo(mnemonic string) (*proto.WorkspaceInf
 	err := iter.Error()
 
 	// Add the owners to the object
-	foundWorkspaceInfo.WorkspaceOwners = make([]*proto.WorkspaceOwner, 0)
-	for _, workspaceOwner := range workspaceOwnerMap {
-		foundWorkspaceInfo.WorkspaceOwners = append(foundWorkspaceInfo.WorkspaceOwners, workspaceOwner)
+	foundWorkspaceInfo.WorkspaceOwnerPublicKeys = make([]string, 0)
+	for _, workspaceOwnerPK := range workspaceOwnerPKMap {
+		foundWorkspaceInfo.WorkspaceOwnerPublicKeys = append(foundWorkspaceInfo.WorkspaceOwnerPublicKeys, workspaceOwnerPK)
 	}
 
 	// Add the contacts if this is the correct security type
@@ -671,6 +693,10 @@ func (sh *StorageHandler) CreateWorkspaceInfo(workspaceInfo *proto.WorkspaceInfo
 			WORKSPACE_INFO_SECURITY_TYPE,
 			[]byte(workspaceInfo.SecurityType),
 		},
+		{
+			WORKSPACE_INFO_TYPE,
+			[]byte(workspaceInfo.WorkspaceType),
+		},
 	}
 
 	// Set the base fields
@@ -683,7 +709,7 @@ func (sh *StorageHandler) CreateWorkspaceInfo(workspaceInfo *proto.WorkspaceInfo
 	}
 
 	// Set the workspace owners
-	if len(workspaceInfo.WorkspaceOwners) > 0 {
+	if len(workspaceInfo.WorkspaceOwnerPublicKeys) > 0 {
 		workspaceOwnerIndex := big.NewInt(1)
 		indexFound := false
 		for !indexFound {
@@ -707,20 +733,13 @@ func (sh *StorageHandler) CreateWorkspaceInfo(workspaceInfo *proto.WorkspaceInfo
 		// workspaceInfo:<mnemonic>:workspaceOwner:<index>:attributeName => value
 		workspaceOwnerKeybase := append(entityKeyBase, WORKSPACE_INFO_WORKSPACE_OWNER...)
 		workspaceOwnerKeybase = append(workspaceOwnerKeybase, delimiter...)
-		for _, workspaceOwner := range workspaceInfo.WorkspaceOwners {
+		for _, workspaceOwnerPK := range workspaceInfo.WorkspaceOwnerPublicKeys {
 			key := append(workspaceOwnerKeybase, []byte(workspaceOwnerIndex.String())...)
 			key = append(key, delimiter...)
 
-			// libp2p address
-			libp2pAddressKey := append(key, WORKSPACE_INFO_WORKSPACE_OWNER_LIBP2P...)
-			putError := sh.db.Put(libp2pAddressKey, []byte(workspaceOwner.Libp2PAddress), nil)
-			if putError != nil {
-				return putError
-			}
-
 			// public key
 			publicKeyKey := append(key, WORKSPACE_INFO_WORKSPACE_PUBLIC_KEY...)
-			putError = sh.db.Put(publicKeyKey, []byte(workspaceOwner.PublicKey), nil)
+			putError := sh.db.Put(publicKeyKey, []byte(workspaceOwnerPK), nil)
 			if putError != nil {
 				return putError
 			}

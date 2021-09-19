@@ -10,11 +10,11 @@ import { useFormik } from 'formik';
 import { FC, useContext, useEffect, useState } from 'react';
 import NewWorkspaceContext from '../../../context/NewWorkspaceContext';
 import {
-  ContactResponse,
   ENWAccessControl,
   INWAccessControlContacts,
   INWAccessControlPassword
 } from '../../../context/newWorkspaceContext.types';
+import { IContactResponse } from '../../../services/contacts/contactsService.types';
 import { nwSecurityPasswordSchema } from '../../../shared/schemas/workspaceSchemas';
 import theme from '../../../theme/theme';
 import FormTitle from '../../atoms/FormTitle/FormTitle';
@@ -81,9 +81,9 @@ const NewWorkspaceSecurity: FC<INewWorkspaceSecurityProps> = () => {
     securityFormik.values.accessControlType = type;
   };
 
-  const [contactIDs, setContactIDs] = useState<{ contacts: ContactResponse[] }>(
-    { contacts: securityFormik.values.contactIDs }
-  );
+  const [contactIDs, setContactIDs] = useState<{
+    contacts: IContactResponse[];
+  }>({ contacts: securityFormik.values.contactIDs });
 
   useEffect(() => {
     securityFormik.values.contactIDs = contactIDs.contacts;

@@ -4,6 +4,7 @@ option go_package = "/proto";
 
 service WorkspaceInfoService {
   rpc GetWorkspaceInfo(WorkspaceInfoRequest) returns (WorkspaceInfo);
+  rpc CreateNewWorkspace(WorkspaceInfo) returns (WorkspaceInfo);
 }
 
 message WorkspaceInfoRequest {
@@ -15,19 +16,15 @@ message WorkspaceInfoRequest {
 message WorkspaceInfo {
   string name = 1;
   string mnemonic = 2;
-  repeated WorkspaceOwner workspace_owners = 3;
+  repeated string workspace_owner_public_keys = 3;
 
   string security_type = 4;
   oneof security_settings {
     ContactsWrapper contacts_wrapper = 5;
     string password_hash = 6;
   }
-}
 
-// Defines a workspace owner
-message WorkspaceOwner {
-  string public_key = 1;
-  string libp2p_address = 2;
+  string workspace_type = 7;
 }
 
 // ContactsWrapper is a wrapper object for

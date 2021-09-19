@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"time"
 
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/hashicorp/go-hclog"
@@ -21,6 +20,7 @@ import (
 	"github.com/multiformats/go-multiaddr"
 	"github.com/zivkovicmilos/peer_drop/config"
 	localCrypto "github.com/zivkovicmilos/peer_drop/crypto"
+	"github.com/zivkovicmilos/peer_drop/mnemonic"
 	"github.com/zivkovicmilos/peer_drop/proto"
 	"github.com/zivkovicmilos/peer_drop/storage"
 
@@ -128,8 +128,6 @@ func (r *RendezvousServer) Start(closeChannel chan struct{}) {
 	)
 	r.me = rendezvousHost.ID()
 
-	// TODO set stream handlers
-
 	// Connect to other rendezvous nodes
 	r.connectToRendezvousPeers()
 
@@ -149,26 +147,12 @@ func (r *RendezvousServer) Start(closeChannel chan struct{}) {
 	<-closeChannel
 }
 
-func (r *RendezvousServer) statusDummy() {
-	timeout := time.NewTicker(time.Second * 1)
-
-	for {
-		_ = <-timeout.C
-		r.logger.Info(fmt.Sprintf("I have %d peers", len(r.pubSub.ListPeers(rendezvousTopic))))
-	}
-}
-
 func (r *RendezvousServer) sendDummyMessage() {
 	m := &proto.WorkspaceInfo{
-		Mnemonic: "mymnemonic",
-		WorkspaceOwners: []*proto.WorkspaceOwner{
-			{
-				PublicKey:     "public",
-				Libp2PAddress: "libp2p",
-			},
-		},
-		SecurityType:     "password",
-		SecuritySettings: &proto.WorkspaceInfo_PasswordHash{PasswordHash: "passwordHash"},
+		Mnemonic:                 "mymnemonic",
+		WorkspaceOwnerPublicKeys: []string{"123", "456"},
+		SecurityType:             "password",
+		SecuritySettings:         &proto.WorkspaceInfo_PasswordHash{PasswordHash: "passwordHash"},
 	}
 
 	marshaler := jsonpb.Marshaler{}
@@ -335,4 +319,45 @@ func (r *RendezvousServer) GetWorkspaceInfo(
 	}
 
 	return foundWorkspaceInfo, nil
+}
+
+// CreateNewWorkspace generates mnemonic for the workspace and gossips it
+func (r *RendezvousServer) CreateNewWorkspace(
+	context context.Context,
+	workspaceInfo *proto.WorkspaceInfo,
+) (*proto.WorkspaceInfo, error) {
+	mg := mnemonic.MnemonicGenerator{NumWords: 6}
+
+	generatedMnemonic, generateErr := mg.GenerateMnemonic()
+	if generateErr != nil {
+		return workspaceInfo, generateErr
+	}
+
+	workspaceInfo.Mnemonic = generatedMnemonic
+	r.handleNewWorkspace(workspaceInfo) // TODO make this a go routine?
+
+	return workspaceInfo, nil
+}
+
+func (r *RendezvousServer) handleNewWorkspace(workspaceInfo *proto.WorkspaceInfo) {
+	r.logger.Info("Attempting to publish workspace info")
+
+	storeErr := storage.GetStorageHandler().CreateWorkspaceInfo(workspaceInfo)
+	if storeErr != nil {
+		r.logger.Error(fmt.Sprintf("Unable to store workspace info, %v", storeErr))
+	}
+
+	marshaler := jsonpb.Marshaler{}
+	buf := new(bytes.Buffer)
+	err := marshaler.Marshal(buf, workspaceInfo)
+	if err != nil {
+		r.logger.Error(fmt.Sprintf("Unable to marshal workspace info, %v", err))
+	}
+
+	sendErr := r.pubSubTopic.Publish(r.ctx, buf.Bytes())
+	if sendErr != nil {
+		r.logger.Error(fmt.Sprintf("Unable to publish workspace info, %v", sendErr))
+	}
+
+	r.logger.Info("Workspace info successfully published")
 }

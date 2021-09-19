@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"github.com/hashicorp/go-hclog"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/host"
+	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/protocol"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -17,6 +19,7 @@ import (
 	"github.com/zivkovicmilos/peer_drop/config"
 	localCrypto "github.com/zivkovicmilos/peer_drop/crypto"
 	"github.com/zivkovicmilos/peer_drop/proto"
+	"github.com/zivkovicmilos/peer_drop/rest/types"
 	"github.com/zivkovicmilos/peer_drop/storage"
 	"google.golang.org/grpc"
 )
@@ -26,8 +29,9 @@ type ClientServer struct {
 	nodeConfig *config.NodeConfig
 
 	// Networking metadata //
-	me   peer.ID
-	host host.Host
+	me            peer.ID
+	host          host.Host
+	rendezvousIDs []peer.ID
 
 	// Context //
 	ctx        context.Context
@@ -40,8 +44,9 @@ func NewClientServer(
 	nodeConfig *config.NodeConfig,
 ) *ClientServer {
 	return &ClientServer{
-		logger:     logger.Named("client-node"),
-		nodeConfig: nodeConfig,
+		logger:        logger.Named("networking"),
+		nodeConfig:    nodeConfig,
+		rendezvousIDs: make([]peer.ID, 0),
 	}
 }
 
@@ -153,34 +158,129 @@ func (cs *ClientServer) dialRendezvous() {
 				cs.logger.Error(fmt.Sprintf("Unable to connect to rendezvous node (%s), %v", *peerinfo, err))
 			} else {
 				cs.logger.Info(fmt.Sprintf("Successfully connected to rendezvous node %s", *peerinfo))
-
-				cs.initiateStreamToRendezvous(peerinfo.ID)
+				cs.rendezvousIDs = append(cs.rendezvousIDs, peerinfo.ID)
 			}
 		}()
 	}
 	wg.Wait()
 }
 
-// initiateStreamToRendezvous creates a communication stream between the rendezvous node
-// and the current node
-func (cs *ClientServer) initiateStreamToRendezvous(peerID peer.ID) {
-	stream, err := cs.host.NewStream(cs.ctx, peerID, protocol.ID(config.WorkspaceInfoProto))
-	if err != nil {
-		cs.logger.Error(fmt.Sprintf("Unable to instantiate stream to rendezvous node, %v", err))
+// GetWorkspaceInfo fetches workspace info from rendezvous nodes
+func (cs *ClientServer) GetWorkspaceInfo(mnemonic string) (*proto.WorkspaceInfo, error) {
+	rendezvousID, findErr := cs.findBestRendezvous()
+	if findErr != nil {
+		return nil, findErr
 	}
 
+	stream, err := cs.host.NewStream(cs.ctx, *rendezvousID, protocol.ID(config.WorkspaceInfoProto))
+	if err != nil {
+		return nil, fmt.Errorf("unable to instantiate stream to rendezvous node, %v", err)
+	}
+	defer func(stream network.Stream) {
+		if streamCloseErr := stream.Close(); streamCloseErr != nil {
+			cs.logger.Error(fmt.Sprintf("Unable to gracefully close stream, %v", streamCloseErr))
+		}
+	}(stream)
+
+	// Grab the wrapped connection
 	clientConn := WrapStreamInClient(stream)
 
-	// TODO persist this in memory
-	_ = proto.NewWorkspaceInfoServiceClient(clientConn.(*grpc.ClientConn))
+	// Instantiate the proto client
+	clientProto := proto.NewWorkspaceInfoServiceClient(clientConn.(*grpc.ClientConn))
 
-	//workspaceInfo, err := clientProto.GetWorkspaceInfo(
-	//	context.Background(),
-	//	&proto.WorkspaceInfoRequest{Mnemonic: "dummy"},
-	//)
-	//if err != nil {
-	//	cs.logger.Error(fmt.Sprintf("Unable to get workspace info, %v", workspaceInfo))
-	//} else {
-	//	cs.logger.Info(fmt.Sprintf("Received workspace info with mnemonic: %s", workspaceInfo.Mnemonic))
-	//}
+	// Call the RPC method
+	return clientProto.GetWorkspaceInfo(
+		context.Background(),
+		&proto.WorkspaceInfoRequest{Mnemonic: mnemonic},
+	)
+}
+
+// findBestRendezvous finds the best suitable rendezvous node
+func (cs *ClientServer) findBestRendezvous() (*peer.ID, error) {
+	for indx, peerID := range cs.rendezvousIDs {
+		if cs.host.Network().Connectedness(peerID) == network.Connected {
+			return &peerID, nil
+		} else {
+			// Remove the unconnected rendezvous from the array
+			cs.rendezvousIDs = append(cs.rendezvousIDs[:indx], cs.rendezvousIDs[indx+1:]...)
+		}
+	}
+
+	return nil, errors.New("no suitable rendezvous node found")
+}
+
+// CreateWorkspace sends a new workspace request to the rendezvous nodes
+func (cs *ClientServer) CreateWorkspace(workspaceRequest types.NewWorkspaceRequest) (*proto.WorkspaceInfo, error) {
+	rendezvousID, findErr := cs.findBestRendezvous()
+	if findErr != nil {
+		return nil, findErr
+	}
+
+	stream, err := cs.host.NewStream(cs.ctx, *rendezvousID, protocol.ID(config.WorkspaceInfoProto))
+	if err != nil {
+		return nil, fmt.Errorf("unable to instantiate stream to rendezvous node, %v", err)
+	}
+	defer func(stream network.Stream) {
+		if streamCloseErr := stream.Close(); streamCloseErr != nil {
+			cs.logger.Error(fmt.Sprintf("Unable to gracefully close stream, %v", streamCloseErr))
+		}
+	}(stream)
+
+	// Grab the wrapped connection
+	clientConn := WrapStreamInClient(stream)
+
+	// Instantiate the proto client
+	clientProto := proto.NewWorkspaceInfoServiceClient(clientConn.(*grpc.ClientConn))
+
+	// Call the RPC method
+	return clientProto.CreateNewWorkspace(
+		context.Background(),
+		cs.workspaceRequestToWorkspaceInfo(workspaceRequest),
+	)
+}
+
+func (cs *ClientServer) workspaceRequestToWorkspaceInfo(
+	workspaceRequest types.NewWorkspaceRequest,
+) *proto.WorkspaceInfo {
+	workspaceInfo := &proto.WorkspaceInfo{
+		Name: workspaceRequest.WorkspaceName,
+	}
+
+	// Set access control type
+	if workspaceRequest.WorkspaceAccessControlType == "Password" {
+		workspaceInfo.SecurityType = "password"
+
+		workspaceInfo.SecuritySettings = &proto.WorkspaceInfo_PasswordHash{
+			PasswordHash: workspaceRequest.WorkspaceAccessControl.Password,
+		}
+	} else {
+		contactPublicKeys := make([]string, 0)
+
+		for _, contact := range workspaceRequest.WorkspaceAccessControl.Contacts {
+			contactPublicKeys = append(contactPublicKeys, contact.PublicKey)
+		}
+
+		workspaceInfo.SecurityType = "contacts"
+		workspaceInfo.SecuritySettings = &proto.WorkspaceInfo_ContactsWrapper{
+			ContactsWrapper: &proto.ContactsWrapper{
+				ContactPublicKeys: contactPublicKeys,
+			},
+		}
+	}
+
+	switch workspaceRequest.WorkspaceType {
+	case "Send only":
+		workspaceInfo.WorkspaceType = "send-only"
+	case "Receive only":
+		workspaceInfo.WorkspaceType = "receive-only"
+	default:
+		workspaceInfo.WorkspaceType = "send-receive"
+	}
+
+	workspaceOwners := make([]string, 0)
+
+	workspaceOwners = append(workspaceOwners, workspaceRequest.WorkspaceOwners...)
+	workspaceInfo.WorkspaceOwnerPublicKeys = workspaceOwners
+
+	return workspaceInfo
 }

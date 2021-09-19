@@ -1,3 +1,5 @@
+import { IContactResponse } from '../services/contacts/contactsService.types';
+
 export enum ENewWorkspaceType {
   SEND_ONLY = 'Send only',
   RECEIVE_ONLY = 'Receive only',
@@ -15,13 +17,7 @@ export enum ENWAccessControl {
 }
 
 export interface INWAccessControlContacts {
-  contacts: ContactResponse[];
-}
-
-export interface ContactResponse {
-  id: string;
-  name: string;
-  publicKeyID: string;
+  contacts: IContactResponse[];
 }
 
 export interface INWAccessControlPassword {
@@ -41,6 +37,6 @@ export interface INWPermissions {
 
   additionalOwners: {
     active: boolean;
-    contactIDs?: ContactResponse[];
+    contactIDs?: IContactResponse[];
   };
 }

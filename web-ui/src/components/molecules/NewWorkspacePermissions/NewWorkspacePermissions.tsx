@@ -4,7 +4,7 @@ import { useFormik } from 'formik';
 import moment from 'moment';
 import { FC, useContext, useEffect, useState } from 'react';
 import NewWorkspaceContext from '../../../context/NewWorkspaceContext';
-import { ContactResponse } from '../../../context/newWorkspaceContext.types';
+import { IContactResponse } from '../../../services/contacts/contactsService.types';
 import { nwPermissionsSchema } from '../../../shared/schemas/workspaceSchemas';
 import StepButton from '../../atoms/StepButton/StepButton';
 import SwitchBox from '../../atoms/SwitchBox/SwitchBox';
@@ -142,9 +142,9 @@ const NewWorkspacePermissions: FC<INewWorkspacePermissionsProps> = () => {
 
   const [selectedDate, setSelectedDate] = useState<Date>(getDate);
 
-  const [contactIDs, setContactIDs] = useState<{ contacts: ContactResponse[] }>(
-    { contacts: permissionsFormik.values.contactIDs }
-  );
+  const [contactIDs, setContactIDs] = useState<{
+    contacts: IContactResponse[];
+  }>({ contacts: permissionsFormik.values.contactIDs });
 
   useEffect(() => {
     permissionsFormik.values.contactIDs = contactIDs.contacts;

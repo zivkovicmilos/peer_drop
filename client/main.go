@@ -13,20 +13,14 @@ import (
 	"github.com/zivkovicmilos/peer_drop/config"
 	"github.com/zivkovicmilos/peer_drop/networking/client"
 	"github.com/zivkovicmilos/peer_drop/rendezvous"
-	"github.com/zivkovicmilos/peer_drop/rest"
+	"github.com/zivkovicmilos/peer_drop/rest/dispatcher"
+	servicehandler "github.com/zivkovicmilos/peer_drop/service-handler"
 	"github.com/zivkovicmilos/peer_drop/storage"
 )
 
-type ServiceHandler struct {
-	logger       hclog.Logger
-	closeChannel chan os.Signal
-
-	serviceListeners map[string]chan struct{}
-}
-
-var serviceHandler *ServiceHandler
-
 type RendezvousNodes []string
+
+var serviceHandlerInstance *servicehandler.ServiceHandler
 
 func (rn *RendezvousNodes) String() string {
 	return formatArray(*rn)
@@ -81,20 +75,20 @@ func main() {
 	}
 
 	// Initialize the service handler
-	serviceHandler = &ServiceHandler{
-		serviceListeners: make(map[string]chan struct{}),
-	}
+	serviceHandlerInstance = servicehandler.GetServiceHandler()
 
 	// Set up the logger
-	serviceHandler.logger = hclog.New(&hclog.LoggerOptions{
+	logger := hclog.New(&hclog.LoggerOptions{
 		Name:  "peer_drop",
 		Level: hclog.LevelFromString("DEBUG"),
 	})
 
 	// Set up the storage
 	storageHandler := storage.GetStorageHandler()
-	storageHandler.SetLogger(serviceHandler.logger)
-	storageHandler.SetCloseChannel(serviceHandler.registerCloseListener("storageHandler"))
+	storageHandler.SetLogger(logger)
+	storageHandler.SetCloseChannel(
+		serviceHandlerInstance.RegisterCloseListener("storageHandler"),
+	)
 
 	if storageErr := storage.GetStorageHandler().OpenDB(
 		fmt.Sprintf("%s/%s/", *baseDirPtr, config.DirectoryStorage),
@@ -103,11 +97,13 @@ func main() {
 	}
 
 	// Set up the close mechanism
-	serviceHandler.closeChannel = make(chan os.Signal, 1)
-	signal.Notify(serviceHandler.closeChannel, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+	closeChannel := make(chan os.Signal, 1)
+	signal.Notify(closeChannel, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+
+	serviceHandlerInstance.SetCloseChannel(closeChannel)
 
 	// Start the broadcast notifier
-	go serviceHandler.broadcastNotifier()
+	go serviceHandlerInstance.BroadcastNotifier()
 
 	// ===== CLIENT SPECIFIC SETUP ===== //
 
@@ -121,17 +117,17 @@ func main() {
 	}
 
 	if *rendezvousMode {
-		setupAsRendezvous(nodeConfig, &config.RendezvousConfig{
+		setupAsRendezvous(logger, nodeConfig, &config.RendezvousConfig{
 			RendezvousNodes: rendezvousNodes,
 		},
 		)
 	} else {
-		setupAsClient(nodeConfig)
+		setupAsClient(logger, nodeConfig)
 	}
 }
 
 // setupAsClient sets up the current peer_drop. node as a client
-func setupAsClient(nodeConfig *config.NodeConfig) {
+func setupAsClient(logger hclog.Logger, nodeConfig *config.NodeConfig) {
 	// Set up the directories
 	if directoryError := createDirectory(
 		fmt.Sprintf("%s/%s", nodeConfig.BaseDir, config.DirectoryFiles),
@@ -146,20 +142,27 @@ func setupAsClient(nodeConfig *config.NodeConfig) {
 	}
 
 	// Set up the http dispatcher
-	dispatcher := rest.NewDispatcher(
-		serviceHandler.logger,
+	createdDispatcher := dispatcher.NewDispatcher(
+		logger,
 		nodeConfig,
 	)
 
-	go dispatcher.Start(serviceHandler.registerCloseListener("dispatcher"))
+	go createdDispatcher.Start(serviceHandlerInstance.RegisterCloseListener("dispatcher"))
 
 	// Set up the networking layer
-	clientServer := client.NewClientServer(serviceHandler.logger, nodeConfig)
-	clientServer.Start(serviceHandler.registerCloseListener("client-server")) // TODO start as goroutine
+	clientServer := client.NewClientServer(logger, nodeConfig)
+
+	clientServer.Start(serviceHandlerInstance.RegisterCloseListener("client-server")) // TODO start as goroutine
+	serviceHandlerInstance.SetClientServer(clientServer)
+
 }
 
 // setupAsRendezvous sets up the current peer_drop. node as a rendezvous server
-func setupAsRendezvous(nodeConfig *config.NodeConfig, rendezvousConfig *config.RendezvousConfig) {
+func setupAsRendezvous(
+	logger hclog.Logger,
+	nodeConfig *config.NodeConfig,
+	rendezvousConfig *config.RendezvousConfig,
+) {
 	// Set up the directories
 	if directoryError := createDirectory(
 		fmt.Sprintf("%s/%s", nodeConfig.BaseDir, config.DirectoryLibp2p),
@@ -169,12 +172,12 @@ func setupAsRendezvous(nodeConfig *config.NodeConfig, rendezvousConfig *config.R
 
 	// Set up the rendezvous server
 	rendezvousServer := rendezvous.NewRendezvousServer(
-		serviceHandler.logger,
+		logger,
 		nodeConfig,
 		rendezvousConfig,
 	)
 
-	rendezvousServer.Start(serviceHandler.registerCloseListener("rendezvous"))
+	rendezvousServer.Start(serviceHandlerInstance.RegisterCloseListener("rendezvous"))
 }
 
 // createDirectory creates a single directory
@@ -186,22 +189,4 @@ func createDirectory(path string) error {
 	} else {
 		return err
 	}
-}
-
-// broadcastNotifier waits for a term signal and alerts all listening services
-func (sh *ServiceHandler) broadcastNotifier() {
-	<-sh.closeChannel
-
-	// Alert all registered services
-	for _, serviceChannel := range sh.serviceListeners {
-		serviceChannel <- struct{}{}
-	}
-}
-
-// registerCloseListener adds a new listener for Service Handler's close events
-func (sh *ServiceHandler) registerCloseListener(serviceName string) chan struct{} {
-	channel := make(chan struct{}, 1)
-	sh.serviceListeners[serviceName] = channel
-
-	return sh.serviceListeners[serviceName]
 }

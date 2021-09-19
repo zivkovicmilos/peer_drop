@@ -13,7 +13,8 @@ import { makeStyles } from '@material-ui/core/styles';
 import AddRoundedIcon from '@material-ui/icons/AddRounded';
 import CloseRoundedIcon from '@material-ui/icons/CloseRounded';
 import { FC, useEffect, useState } from 'react';
-import { ContactResponse } from '../../../context/newWorkspaceContext.types';
+import ContactsService from '../../../services/contacts/contactsService';
+import { IContactResponse } from '../../../services/contacts/contactsService.types';
 import theme from '../../../theme/theme';
 import ActionButton from '../../atoms/ActionButton/ActionButton';
 import FormTitle from '../../atoms/FormTitle/FormTitle';
@@ -36,77 +37,27 @@ const SpecificContacts: FC<ISpecificContactsProps> = (props) => {
 
   const [loading, setLoading] = useState<boolean>(true);
 
-  const [allContacts, setAllContacts] = useState<
-    { list: ContactResponse[] } | undefined
-  >();
+  const [allContacts, setAllContacts] = useState<{ data: IContactResponse[] } | undefined>();
 
-  const [filteredList, setFilteredList] = useState<
-    { list: ContactResponse[] } | undefined
-  >({ list: [] });
+  const [filteredList, setFilteredList] = useState<{ data: IContactResponse[] } | undefined>({ data: [] });
 
   const [selectedContacts, setSelectedContacts] = useState<{
-    list: ContactResponse[];
+    data: IContactResponse[];
   }>({
-    list: contactIDs.contacts
+    data: contactIDs.contacts
   });
 
   useEffect(() => {
     if (dialogOpen) {
       const fetchAllContacts = async () => {
-        return [
-          {
-            id: '123',
-            name: 'Milos Zivkovic',
-            publicKeyID: '123'
-          },
-          {
-            id: '1234',
-            name: 'Milos Zivkovic',
-            publicKeyID: '1234'
-          },
-          {
-            id: '12345',
-            name: 'Milos Zivkovic',
-            publicKeyID: '12345'
-          },
-          {
-            id: '123456',
-            name: 'Milos Zivkovic',
-            publicKeyID: '123456'
-          },
-          {
-            id: '1234567',
-            name: 'Milos Zivkovic',
-            publicKeyID: '123456'
-          },
-          {
-            id: '12345678',
-            name: 'Milos Zivkovic',
-            publicKeyID: '123456'
-          },
-          {
-            id: '12345689',
-            name: 'Milos Zivkovic',
-            publicKeyID: '123456'
-          },
-          {
-            id: '1234568910',
-            name: 'Milos Zivkovic',
-            publicKeyID: '123456'
-          },
-          {
-            id: '1234568911',
-            name: 'Milos Zivkovic',
-            publicKeyID: '123456'
-          }
-        ];
+        return await ContactsService.getContacts({ page: -1, limit: -1 });
       };
 
       fetchAllContacts()
         .then((response) => {
-          setAllContacts({ list: response });
+          setAllContacts({ data: response.data });
 
-          setFilteredList({ list: response });
+          setFilteredList({ data: response.data });
         })
         .catch((err) => {
           openSnackbar('Unable to fetch contact list', 'error');
@@ -118,34 +69,30 @@ const SpecificContacts: FC<ISpecificContactsProps> = (props) => {
   }, [dialogOpen]);
 
   const isContactChecked = (id: string) => {
-    return selectedContacts.list.some((itemId) => itemId.id === id);
+    return selectedContacts.data.some((contact) => contact.id === id);
   };
 
   const findContact = (id: string) => {
-    for (let i = 0; i < selectedContacts.list.length; i++) {
-      if (selectedContacts.list[i].id === id) return i;
+    for (let i = 0; i < selectedContacts.data.length; i++) {
+      if (selectedContacts.data[i].id === id) return i;
     }
 
     return -1;
   };
 
-  const handleContactToggle = async (
-    id: string,
-    name: string,
-    publicKeyID: string
-  ) => {
-    const index = findContact(id);
+  const handleContactToggle = async (data: IContactResponse) => {
+    const index = findContact(data.id);
 
     if (index > -1) {
-      let newArr = selectedContacts.list;
+      let newArr = selectedContacts.data;
       newArr.splice(index, 1);
 
-      setSelectedContacts({ list: newArr });
+      setSelectedContacts({ data: newArr });
     } else {
-      let newArr = selectedContacts.list;
-      newArr.push({ id, name, publicKeyID });
+      let newArr = selectedContacts.data;
+      newArr.push(data);
 
-      setSelectedContacts({ list: newArr });
+      setSelectedContacts({ data: newArr });
     }
   };
 
@@ -163,14 +110,14 @@ const SpecificContacts: FC<ISpecificContactsProps> = (props) => {
   const handleSearchInputChange = (event: any) => {
     const value = event.target.value;
 
-    let tempFilteredContacts = { list: allContacts.list };
+    let tempFilteredContacts = { data: allContacts.data };
     // Filter if there is a value in search input
     if (value) {
-      tempFilteredContacts.list = manualFilter(
+      tempFilteredContacts.data = manualFilter(
         (contact: any) =>
           contact.name.toLowerCase().includes(value.toLowerCase()) ||
           contact.publicKeyID.toLowerCase().includes(value.toLowerCase()),
-        allContacts.list
+        allContacts.data
       );
     }
 
@@ -180,9 +127,9 @@ const SpecificContacts: FC<ISpecificContactsProps> = (props) => {
   const handleDialogToggle = (open: boolean) => {
     setDialogOpen(open);
 
-    let contactIDs: ContactResponse[] = [];
-    for (let i = 0; i < selectedContacts.list.length; i++) {
-      contactIDs.push(selectedContacts.list[i]);
+    let contactIDs: IContactResponse[] = [];
+    for (let i = 0; i < selectedContacts.data.length; i++) {
+      contactIDs.push(selectedContacts.data[i]);
     }
 
     setContactIDs({ contacts: contactIDs });
@@ -205,7 +152,7 @@ const SpecificContacts: FC<ISpecificContactsProps> = (props) => {
         </Box>
       </Box>
       <Box>
-        {selectedContacts.list.length < 1 ? (
+        {selectedContacts.data.length < 1 ? (
           <Typography className={classes.noContacts}>
             No contacts added
           </Typography>
@@ -219,8 +166,8 @@ const SpecificContacts: FC<ISpecificContactsProps> = (props) => {
             maxHeight={'200px'}
             minHeight={'200px'}
           >
-            {selectedContacts.list.map(
-              (selectedContact: ContactResponse, index) => {
+            {selectedContacts.data.map(
+              (selectedContact: IContactResponse, index) => {
                 return (
                   <Box mb={1} ml={1}>
                     <Typography>{`${index + 1}. ${selectedContact.name} (${
@@ -280,31 +227,25 @@ const SpecificContacts: FC<ISpecificContactsProps> = (props) => {
           </Box>
 
           {filteredList &&
-            filteredList.list.map((contact) => {
-              return (
-                <FormControlLabel
-                  key={`contact-${contact.id}`}
-                  value={contact.id}
-                  control={<Checkbox color={'primary'} />}
-                  label={
-                    <Typography style={{ textAlign: 'left' }}>
-                      {`${contact.name} (${contact.publicKeyID})`}
-                    </Typography>
-                  }
-                  labelPlacement="end"
-                  checked={isContactChecked(contact.id)}
-                  onChange={() =>
-                    handleContactToggle(
-                      contact.id,
-                      contact.name,
-                      contact.publicKeyID
-                    )
-                  }
-                />
-              );
-            })}
+          filteredList.data.map((contact) => {
+            return (
+              <FormControlLabel
+                key={`contact-${contact.id}`}
+                value={contact.id}
+                control={<Checkbox color={'primary'} />}
+                label={
+                  <Typography style={{ textAlign: 'left' }}>
+                    {`${contact.name} (${contact.publicKeyID})`}
+                  </Typography>
+                }
+                labelPlacement="end"
+                checked={isContactChecked(contact.id)}
+                onChange={() => handleContactToggle(contact)}
+              />
+            );
+          })}
           {loading && <LoadingIndicator size={54} />}
-          {!loading && filteredList && filteredList.list.length < 1 && (
+          {!loading && filteredList && filteredList.data.length < 1 && (
             <Box
               display={'flex'}
               width={'100%'}
