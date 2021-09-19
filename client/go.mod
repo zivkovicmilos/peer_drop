@@ -13,6 +13,7 @@ require (
 	github.com/libp2p/go-libp2p-pubsub v0.5.4
 	github.com/multiformats/go-multiaddr v0.4.0
 	github.com/rs/cors v1.8.0
+	github.com/stretchr/testify v1.7.0 // indirect
 	github.com/syndtr/goleveldb v1.0.0
 	golang.org/x/crypto v0.0.0-20210817164053-32db794688a5
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616 // indirect
