@@ -20,7 +20,9 @@ var once sync.Once
 // GetServiceHandler initializes the service handler singleton
 func GetServiceHandler() *ServiceHandler {
 	once.Do(func() {
-		serviceHandlerInstance = ServiceHandler{}
+		serviceHandlerInstance = ServiceHandler{
+			serviceListeners: make(map[string]chan struct{}),
+		}
 	})
 
 	return &serviceHandlerInstance
