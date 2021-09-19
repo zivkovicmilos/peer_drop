@@ -2,6 +2,14 @@ syntax = "proto3";
 
 option go_package = "/proto";
 
+service WorkspaceInfoService {
+  rpc GetWorkspaceInfo(WorkspaceInfoRequest) returns (WorkspaceInfo);
+}
+
+message WorkspaceInfoRequest {
+  string mnemonic = 1;
+}
+
 // Exchanged between Rendezvous nodes,
 // as well as between Client and Rendezvous nodes
 message WorkspaceInfo {

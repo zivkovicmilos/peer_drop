@@ -32,6 +32,9 @@ var (
 
 	IDENTITY_PRIMARY = []byte("identityPrimary")
 	WORKSPACE_INFO   = []byte("workspaceInfo")
+
+	// RENDEZVOUS_NODES - Key which will hold an array of rendezvous nodes multiaddrs
+	RENDEZVOUS_NODES = []byte("rendezvousNodes")
 )
 
 // Sub-prefixes
@@ -787,4 +790,31 @@ func (sh *StorageHandler) CreateWorkspaceInfo(workspaceInfo *proto.WorkspaceInfo
 	}
 
 	return nil
+}
+
+// GetRendezvousNodes gets the rendezvous multiaddrs from the local DB
+func (sh *StorageHandler) GetRendezvousNodes() ([]string, error) {
+	value, err := sh.db.Get(RENDEZVOUS_NODES, nil)
+	if err != nil {
+		return []string{}, err
+	}
+
+	// Convert the byte array to a string
+	// The string value will contain all other values concatenated with ,
+	stringValue := string(value)
+
+	// Convert the string to a slice of strings, using , as a delimiter
+	result := strings.Split(stringValue, ",")
+
+	return result, nil
+}
+
+// SetRendezvousNodes sets the nodes rendezvous node multiaddrs
+func (sh *StorageHandler) SetRendezvousNodes(multiAddrs []string) error {
+	concatenated := strings.Join(multiAddrs, ",")
+
+	// Convert the concatenated string array to a byte array
+	storageValue := []byte(concatenated)
+
+	return sh.db.Put(RENDEZVOUS_NODES, storageValue, nil)
 }

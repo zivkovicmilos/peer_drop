@@ -13,7 +13,9 @@ import (
 	"github.com/hashicorp/go-hclog"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/host"
+	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p-core/protocol"
 	"github.com/libp2p/go-libp2p-kad-dht"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/multiformats/go-multiaddr"
@@ -21,6 +23,8 @@ import (
 	localCrypto "github.com/zivkovicmilos/peer_drop/crypto"
 	"github.com/zivkovicmilos/peer_drop/proto"
 	"github.com/zivkovicmilos/peer_drop/storage"
+
+	localGRPC "github.com/zivkovicmilos/peer_drop/networking/client"
 )
 
 var (
@@ -33,7 +37,8 @@ type RendezvousServer struct {
 	rendezvousConfig *config.RendezvousConfig
 
 	// Networking metadata //
-	me peer.ID
+	me   peer.ID
+	host host.Host
 
 	// Message handling //
 	workspaceInfoMsgQueue chan *proto.WorkspaceInfo
@@ -46,6 +51,9 @@ type RendezvousServer struct {
 	// Context //
 	ctx        context.Context
 	cancelFunc context.CancelFunc
+
+	// GRPC //
+	proto.UnimplementedWorkspaceInfoServiceServer
 }
 
 // NewRendezvousServer returns a new instance of the rendezvous server
@@ -66,7 +74,7 @@ func NewRendezvousServer(
 func (r *RendezvousServer) Start(closeChannel chan struct{}) {
 	libp2pKey, keyError := localCrypto.ReadLibp2pKey(
 		filepath.Join(r.nodeConfig.BaseDir, config.DirectoryLibp2p),
-		"libp2p_key.asc",
+		"libp2p_key_rendezvous.asc",
 	)
 	if keyError != nil {
 		os.Exit(1)
@@ -103,6 +111,8 @@ func (r *RendezvousServer) Start(closeChannel chan struct{}) {
 		_ = rendezvousHost.Close()
 	}()
 
+	r.host = rendezvousHost
+
 	_, err = dht.New(ctx, rendezvousHost)
 	if err != nil {
 		r.logger.Error(fmt.Sprintf("Unable to start DHT service, %v", err))
@@ -121,10 +131,10 @@ func (r *RendezvousServer) Start(closeChannel chan struct{}) {
 	// TODO set stream handlers
 
 	// Connect to other rendezvous nodes
-	r.connectToRendezvousPeers(rendezvousHost, ctx)
+	r.connectToRendezvousPeers()
 
 	// Set up the pubsub service
-	pubsubError := r.setupPubsub(rendezvousHost, ctx)
+	pubsubError := r.setupPubsub()
 	if pubsubError != nil {
 		r.logger.Error(fmt.Sprintf("Unable to setup the pubsub instance, %v", pubsubError))
 
@@ -132,18 +142,8 @@ func (r *RendezvousServer) Start(closeChannel chan struct{}) {
 		os.Exit(1)
 	}
 
-	// TODO remove
-	//go r.statusDummy()
-	//c1 := make(chan string, 1)
-	//go func() {
-	//	time.Sleep(10 * time.Second)
-	//	c1 <- "result 1"
-	//}()
-	//select {
-	//case res := <-c1:
-	//	fmt.Println(res)
-	//	r.sendDummyMessage() // TODO remove
-	//}
+	// Set up the GRPC protocol handlers
+	r.setupGRPCProtocols()
 
 	// Wait for a close signal
 	<-closeChannel
@@ -187,8 +187,9 @@ func (r *RendezvousServer) sendDummyMessage() {
 }
 
 // connectToRendezvousPeers attempts to connect to other rendezvous nodes
-func (r *RendezvousServer) connectToRendezvousPeers(host host.Host, ctx context.Context) {
+func (r *RendezvousServer) connectToRendezvousPeers() {
 	r.logger.Info("Attempting connection to other rendezvous nodes...")
+	addedPeers := 0
 
 	var wg sync.WaitGroup
 	for _, peerAddr := range r.rendezvousConfig.RendezvousNodes {
@@ -201,19 +202,26 @@ func (r *RendezvousServer) connectToRendezvousPeers(host host.Host, ctx context.
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if connectErr := host.Connect(ctx, *peerinfo); connectErr != nil {
+			if connectErr := r.host.Connect(r.ctx, *peerinfo); connectErr != nil {
 				r.logger.Error(fmt.Sprintf("Unable to connect to peer: %s", peerinfo.String()))
 			} else {
 				r.logger.Info(fmt.Sprintf("Connection established to rendezvous node: %s", peerinfo.String()))
+				addedPeers = addedPeers + 1
 			}
 		}()
 	}
 	wg.Wait()
+
+	if addedPeers > 0 {
+		r.logger.Info(fmt.Sprintf("Connection established to %d rendezvous nodes", addedPeers))
+	} else {
+		r.logger.Info("No rendezvous peers found")
+	}
 }
 
 // setupPubsub sets up the pubsub service
-func (r *RendezvousServer) setupPubsub(host host.Host, ctx context.Context) error {
-	pubSub, gossipErr := pubsub.NewGossipSub(ctx, host)
+func (r *RendezvousServer) setupPubsub() error {
+	pubSub, gossipErr := pubsub.NewGossipSub(r.ctx, r.host)
 	if gossipErr != nil {
 		return gossipErr
 	}
@@ -245,6 +253,8 @@ func (r *RendezvousServer) setupPubsub(host host.Host, ctx context.Context) erro
 // It grabs new messages as they arrive, and updates the node storage
 func (r *RendezvousServer) readPubsubLoop() {
 	go r.storageUpdateListener()
+
+	// TODO add better closing management with channels
 
 	for {
 		workspaceInfoMsg, err := r.pubSubSubscription.Next(r.ctx)
@@ -292,4 +302,37 @@ func (r *RendezvousServer) storageUpdateListener() {
 			r.logger.Info("Storage update listener received stop signal...")
 		}
 	}
+}
+
+// GRPC //
+
+// setupGRPCProtocols sets up the supported handlers for GRPC protocols
+func (r *RendezvousServer) setupGRPCProtocols() {
+	r.logger.Info("Setting up GRPC protocols...")
+
+	workspaceInfoProtocol := localGRPC.NewGRPCProtocol()
+	proto.RegisterWorkspaceInfoServiceServer(workspaceInfoProtocol.GrpcServer(), r)
+	workspaceInfoProtocol.Serve()
+
+	r.host.SetStreamHandler(protocol.ID(config.WorkspaceInfoProto), func(stream network.Stream) {
+		peerID := stream.Conn().RemotePeer()
+		r.logger.Info(fmt.Sprintf("Open stream [protocol: %s], by peer %s", config.WorkspaceInfoProto, peerID))
+
+		workspaceInfoProtocol.Handler()(stream)
+	})
+
+	r.logger.Info("GRPC protocols set")
+}
+
+// GetWorkspaceInfo returns the workspace info found in a local DB
+func (r *RendezvousServer) GetWorkspaceInfo(
+	context context.Context,
+	request *proto.WorkspaceInfoRequest,
+) (*proto.WorkspaceInfo, error) {
+	foundWorkspaceInfo, findErr := storage.GetStorageHandler().GetWorkspaceInfo(request.Mnemonic)
+	if findErr != nil {
+		return nil, fmt.Errorf("err") // TODO conform grpc
+	}
+
+	return foundWorkspaceInfo, nil
 }

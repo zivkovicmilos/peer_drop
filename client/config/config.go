@@ -9,6 +9,8 @@ type NodeConfig struct {
 	BaseDir     string
 }
 
+// RendezvousConfig contains rendezvous nodes to which other rendezvous nodes
+// should initially connect to
 type RendezvousConfig struct {
 	RendezvousNodes []string
 }
@@ -27,4 +29,17 @@ var (
 	DirectoryLibp2p  = "libp2p"
 	DirectoryStorage = "storage"
 	DirectoryBase    = "app_data"
+)
+
+// Default rendezvous nodes that are already up and running
+var (
+	DefaultRendezvousNodes = []string{
+		"/ip4/0.0.0.0/tcp/10002/p2p/QmNmc9kho9D6ji1Curf2e9Xsi8h7PAHZPpr8r7BcaevnTx", // TODO set
+	}
+)
+
+var (
+	// WorkspaceInfoProto is the protocol name used between Client and Rendezvous nodes
+	// to exchange workspace information
+	WorkspaceInfoProto = "/workspace-info-proto/0.1"
 )

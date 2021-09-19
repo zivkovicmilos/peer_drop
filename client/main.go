@@ -11,6 +11,7 @@ import (
 	"github.com/hashicorp/go-hclog"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/zivkovicmilos/peer_drop/config"
+	"github.com/zivkovicmilos/peer_drop/networking/client"
 	"github.com/zivkovicmilos/peer_drop/rendezvous"
 	"github.com/zivkovicmilos/peer_drop/rest"
 	"github.com/zivkovicmilos/peer_drop/storage"
@@ -138,13 +139,23 @@ func setupAsClient(nodeConfig *config.NodeConfig) {
 		os.Exit(1)
 	}
 
+	if directoryError := createDirectory(
+		fmt.Sprintf("%s/%s", nodeConfig.BaseDir, config.DirectoryLibp2p),
+	); directoryError != nil {
+		os.Exit(1)
+	}
+
 	// Set up the http dispatcher
 	dispatcher := rest.NewDispatcher(
 		serviceHandler.logger,
 		nodeConfig,
 	)
 
-	dispatcher.Start(serviceHandler.registerCloseListener("dispatcher"))
+	go dispatcher.Start(serviceHandler.registerCloseListener("dispatcher"))
+
+	// Set up the networking layer
+	clientServer := client.NewClientServer(serviceHandler.logger, nodeConfig)
+	clientServer.Start(serviceHandler.registerCloseListener("client-server")) // TODO start as goroutine
 }
 
 // setupAsRendezvous sets up the current peer_drop. node as a rendezvous server
