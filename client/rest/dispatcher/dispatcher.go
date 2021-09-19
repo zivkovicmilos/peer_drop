@@ -160,6 +160,7 @@ func (d *Dispatcher) registerEndpoints() {
 
 	// Workspaces
 	d.router.HandleFunc("/api/workspaces", workspaces.CreateWorkspace).Methods("POST")
+	d.router.HandleFunc("/api/workspaces/{mnemonic}", workspaces.GetWorkspaceInfo).Methods("GET")
 
 	// Shutdown handler
 	d.router.HandleFunc("/api/shutdown", ShutdownHandler).Methods("POST")

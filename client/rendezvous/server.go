@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/hashicorp/go-hclog"
@@ -143,31 +144,20 @@ func (r *RendezvousServer) Start(closeChannel chan struct{}) {
 	// Set up the GRPC protocol handlers
 	r.setupGRPCProtocols()
 
+	// TODO remove
+	//go r.statusDummy()
+
 	// Wait for a close signal
 	<-closeChannel
 }
 
-func (r *RendezvousServer) sendDummyMessage() {
-	m := &proto.WorkspaceInfo{
-		Mnemonic:                 "mymnemonic",
-		WorkspaceOwnerPublicKeys: []string{"123", "456"},
-		SecurityType:             "password",
-		SecuritySettings:         &proto.WorkspaceInfo_PasswordHash{PasswordHash: "passwordHash"},
-	}
+func (r *RendezvousServer) statusDummy() {
+	timeout := time.NewTicker(time.Second * 1)
 
-	marshaler := jsonpb.Marshaler{}
-	buf := new(bytes.Buffer)
-	err := marshaler.Marshal(buf, m)
-	if err != nil {
-		r.logger.Info("INVALID MARSHAL")
+	for {
+		_ = <-timeout.C
+		r.logger.Info(fmt.Sprintf("I have %d peers", len(r.pubSub.ListPeers(rendezvousTopic))))
 	}
-
-	sendErr := r.pubSubTopic.Publish(r.ctx, buf.Bytes())
-	if sendErr != nil {
-		r.logger.Info("INVALID SEND")
-	}
-
-	r.logger.Info("MESSAGE SENT")
 }
 
 // connectToRendezvousPeers attempts to connect to other rendezvous nodes
@@ -248,9 +238,11 @@ func (r *RendezvousServer) readPubsubLoop() {
 			close(r.workspaceInfoMsgQueue)
 			return
 		}
+		r.logger.Info("Received a new pubsub message")
 
 		// Forward messages that are not from us
 		if workspaceInfoMsg.ReceivedFrom == r.me {
+			r.logger.Info("Pubsub message skipped")
 			continue
 		}
 
@@ -284,8 +276,10 @@ func (r *RendezvousServer) storageUpdateListener() {
 		} else {
 			// Close message received
 			r.logger.Info("Storage update listener received stop signal...")
+			break
 		}
 	}
+	r.logger.Info("Storage update listener stopped")
 }
 
 // GRPC //
@@ -326,10 +320,13 @@ func (r *RendezvousServer) CreateNewWorkspace(
 	context context.Context,
 	workspaceInfo *proto.WorkspaceInfo,
 ) (*proto.WorkspaceInfo, error) {
+	r.logger.Info("New workspace request received...")
+
 	mg := mnemonic.MnemonicGenerator{NumWords: 6}
 
 	generatedMnemonic, generateErr := mg.GenerateMnemonic()
 	if generateErr != nil {
+		r.logger.Error(fmt.Sprintf("Unable to generate mnemonic, %v", generateErr))
 		return workspaceInfo, generateErr
 	}
 

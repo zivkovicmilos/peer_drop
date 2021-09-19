@@ -20,8 +20,6 @@ import (
 
 type RendezvousNodes []string
 
-var serviceHandlerInstance *servicehandler.ServiceHandler
-
 func (rn *RendezvousNodes) String() string {
 	return formatArray(*rn)
 }
@@ -74,9 +72,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialize the service handler
-	serviceHandlerInstance = servicehandler.GetServiceHandler()
-
 	// Set up the logger
 	logger := hclog.New(&hclog.LoggerOptions{
 		Name:  "peer_drop",
@@ -87,7 +82,7 @@ func main() {
 	storageHandler := storage.GetStorageHandler()
 	storageHandler.SetLogger(logger)
 	storageHandler.SetCloseChannel(
-		serviceHandlerInstance.RegisterCloseListener("storageHandler"),
+		servicehandler.GetServiceHandler().RegisterCloseListener("storageHandler"),
 	)
 
 	if storageErr := storage.GetStorageHandler().OpenDB(
@@ -100,10 +95,10 @@ func main() {
 	closeChannel := make(chan os.Signal, 1)
 	signal.Notify(closeChannel, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 
-	serviceHandlerInstance.SetCloseChannel(closeChannel)
+	servicehandler.GetServiceHandler().SetCloseChannel(closeChannel)
 
 	// Start the broadcast notifier
-	go serviceHandlerInstance.BroadcastNotifier()
+	go servicehandler.GetServiceHandler().BroadcastNotifier()
 
 	// ===== CLIENT SPECIFIC SETUP ===== //
 
@@ -147,14 +142,13 @@ func setupAsClient(logger hclog.Logger, nodeConfig *config.NodeConfig) {
 		nodeConfig,
 	)
 
-	go createdDispatcher.Start(serviceHandlerInstance.RegisterCloseListener("dispatcher"))
+	go createdDispatcher.Start(servicehandler.GetServiceHandler().RegisterCloseListener("dispatcher"))
 
 	// Set up the networking layer
 	clientServer := client.NewClientServer(logger, nodeConfig)
+	servicehandler.GetServiceHandler().SetClientServer(clientServer)
 
-	clientServer.Start(serviceHandlerInstance.RegisterCloseListener("client-server")) // TODO start as goroutine
-	serviceHandlerInstance.SetClientServer(clientServer)
-
+	clientServer.Start(servicehandler.GetServiceHandler().RegisterCloseListener("client-server")) // TODO start as goroutine
 }
 
 // setupAsRendezvous sets up the current peer_drop. node as a rendezvous server
@@ -177,7 +171,7 @@ func setupAsRendezvous(
 		rendezvousConfig,
 	)
 
-	rendezvousServer.Start(serviceHandlerInstance.RegisterCloseListener("rendezvous"))
+	rendezvousServer.Start(servicehandler.GetServiceHandler().RegisterCloseListener("rendezvous"))
 }
 
 // createDirectory creates a single directory
