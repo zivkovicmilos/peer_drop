@@ -29,7 +29,7 @@ func NewGRPCProtocol() *GRPCProtocol {
 	return g
 }
 
-type Context struct {
+type WrappedContext struct {
 	context.Context
 	PeerID peer.ID
 }
@@ -45,9 +45,11 @@ func interceptor(
 	// we expect our libp2p wrapper
 	addr := peer.Addr.(*libp2pInfoWrapper)
 
-	ctx2 := &Context{
+	ctx2 := &WrappedContext{
 		Context: ctx,
-		PeerID:  addr.peerID,
+		// Wrap the context so the peer id can be extracted
+		// from any handler
+		PeerID: addr.peerID,
 	}
 	h, err := handler(ctx2, req)
 

@@ -43,4 +43,8 @@ var (
 	// WorkspaceInfoProto is the protocol name used between Client and Rendezvous nodes
 	// to exchange workspace information
 	WorkspaceInfoProto = "/workspace-info-proto/0.1"
+
+	// ClientVerificationProto is the protocol name used between Client nodes
+	// to perform a handshake verification
+	ClientVerificationProto = "/client-verification-proto/0.1"
 )

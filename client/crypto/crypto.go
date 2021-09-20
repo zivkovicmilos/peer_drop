@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/hex"
 	"errors"
@@ -287,4 +288,10 @@ func rsaPrivToLibp2pPriv(key *rsa.PrivateKey) (libp2pCrypto.PrivKey, error) {
 	}
 
 	return result, nil
+}
+
+// NewSHA256 hashes the input data
+func NewSHA256(data []byte) []byte {
+	hash := sha256.Sum256(data)
+	return hash[:]
 }

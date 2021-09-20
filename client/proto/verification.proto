@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+option go_package = "/proto";
+
+// VerificationService handles client <-> client verification
+// in order to establish secure communication
+service VerificationService {
+  // BeginVerification starts the verification process by issuing a challenge
+  // that the recipient needs to solve
+  rpc BeginVerification(VerificationRequest) returns (Challenge);
+
+  // FinishVerification finishes the verification process by sending
+  // the completed challenge and returning the status of the verification
+  rpc FinishVerification(ChallengeSolution) returns (VerificationResponse);
+}
+
+// Request that the initiator of the connection sends out
+message VerificationRequest {
+  // Mnemonic we're basing this connection on
+  string workspace_mnemonic = 1;
+
+  // If the security for the workspace is contact based,
+  // the challenge creator needs to know which public key to check against
+  optional string public_key = 2;
+}
+
+// Response that the challenge creator sends out
+message VerificationResponse {
+  string message = 1;
+  bool confirmed = 2;
+}
+
+// Challenge that the request initiator needs to complete
+message Challenge {
+  string challenge_id = 1;
+  bytes encrypted_value = 2;    // The value the initiator needs to decrypt
+  int64 timestamp = 3;          // Timestamp when this challenge was issued
+}
+
+// Challenge solution that the request initiator sends out
+message ChallengeSolution {
+  string challenge_id = 1;
+  bytes decrypted_value = 2;
+}
