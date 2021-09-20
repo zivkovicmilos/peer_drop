@@ -14,7 +14,6 @@ import {
 import Link from '../../atoms/Link/Link';
 import PageTitle from '../../atoms/PageTitle/PageTitle';
 import NewWorkspaceParameters from '../../molecules/NewWorkspaceParameters/NewWorkspaceParameters';
-import NewWorkspacePermissions from '../../molecules/NewWorkspacePermissions/NewWorkspacePermissions';
 import NewWorkspaceReview from '../../molecules/NewWorkspaceReview/NewWorkspaceReview';
 import NewWorkspaceSecurity from '../../molecules/NewWorkspaceSecurity/NewWorkspaceSecurity';
 import NewWorkspaceSteps from '../../molecules/NewWorkspaceSteps/NewWorkspaceSteps';
@@ -25,7 +24,7 @@ const NewWorkspace: FC<INewWorkspaceProps> = () => {
   const steps: ENewWorkspaceStep[] = [
     ENewWorkspaceStep.PARAMS,
     ENewWorkspaceStep.SECURITY,
-    ENewWorkspaceStep.PERMISSIONS,
+    // ENewWorkspaceStep.PERMISSIONS,
     ENewWorkspaceStep.REVIEW
   ];
 
@@ -102,13 +101,13 @@ const NewWorkspace: FC<INewWorkspaceProps> = () => {
       case 1:
         // Security
         return <NewWorkspaceSecurity />;
+      // case 2:
+      //   // Permissions
+      //   return <NewWorkspacePermissions />;
       case 2:
-        // Permissions
-        return <NewWorkspacePermissions />;
-      case 3:
         // Review
         return <NewWorkspaceReview />;
-      case 4:
+      case 3:
         // Success
         return <NewWorkspaceSuccess />;
     }
