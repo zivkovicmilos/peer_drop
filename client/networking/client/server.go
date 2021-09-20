@@ -27,6 +27,7 @@ import (
 	"github.com/multiformats/go-multiaddr"
 	"github.com/zivkovicmilos/peer_drop/config"
 	localCrypto "github.com/zivkovicmilos/peer_drop/crypto"
+	"github.com/zivkovicmilos/peer_drop/networking/files"
 	"github.com/zivkovicmilos/peer_drop/proto"
 	"github.com/zivkovicmilos/peer_drop/rest/types"
 	"github.com/zivkovicmilos/peer_drop/rest/utils"
@@ -51,7 +52,10 @@ type ClientServer struct {
 	pubSub                *pubsub.PubSub                  // Reference to the pubsub service
 	pubsubSubscriptions   map[string]*pubsub.Subscription // In memory map of active subscriptions
 	pubsubTopics          map[string]*pubsub.Topic        // In memory map of active topics
-	workspaceDirectoryMap map[string]string               // In memory mapping of workspace directories on disk (mnemonic -> dirName)
+	workspaceDirectoryMap map[string]string               // In memory map of workspace directories on disk (mnemonic -> dirName)
+
+	// File handling //
+	fileListerMap map[string]*files.FileLister // In memory map of file lister services (mnemonic -> fileLister)
 
 	// Workspace handler //
 	newWorkspaceChannel chan *proto.WorkspaceInfo
@@ -59,6 +63,7 @@ type ClientServer struct {
 	// Locks //
 	rendezvousMux    sync.Mutex
 	verifiedPeersMux sync.Mutex // a mux map would be a better solution
+	fileListerMux    sync.RWMutex
 
 	// Context //
 	ctx        context.Context
@@ -85,6 +90,7 @@ func NewClientServer(
 		newWorkspaceChannel: make(chan *proto.WorkspaceInfo),
 		pubsubTopics:        make(map[string]*pubsub.Topic),
 		pubsubSubscriptions: make(map[string]*pubsub.Subscription),
+		fileListerMap:       make(map[string]*files.FileLister),
 	}
 }
 
@@ -244,7 +250,7 @@ func (cs *ClientServer) startPeerDropService() error {
 func (cs *ClientServer) initializeWorkspace(workspaceInfo *proto.WorkspaceInfo) error {
 	mnemonic := workspaceInfo.Mnemonic
 	// Create the folder structure if it doesn't exist
-	if directoryErr := cs.initializeWorkspaceDirectory(workspaceInfo.Name); directoryErr != nil {
+	if directoryErr := cs.initializeWorkspaceDirectory(workspaceInfo.Name, workspaceInfo.Mnemonic); directoryErr != nil {
 		cs.logger.Error(
 			fmt.Sprintf("Unable to initialize directory for %s, %v", workspaceInfo.Name, directoryErr),
 		)
@@ -305,7 +311,7 @@ func (cs *ClientServer) initializeWorkspace(workspaceInfo *proto.WorkspaceInfo) 
 }
 
 // initializeWorkspaceDirectory creates the workspace directory in the folder structure
-func (cs *ClientServer) initializeWorkspaceDirectory(name string) error {
+func (cs *ClientServer) initializeWorkspaceDirectory(name string, mnemonic string) error {
 	// Lowercase the directory name
 	dirName := strings.ToLower(name)
 	dirName = strings.Replace(dirName, " ", "-", -1)
@@ -320,13 +326,30 @@ func (cs *ClientServer) initializeWorkspaceDirectory(name string) error {
 
 	// baseDir/workspaceName/share
 	// Directory is used for sharing node local files
+	shareDirectory := fmt.Sprintf("%s/%s/%s", cs.nodeConfig.BaseDir, dirName, config.DirectoryShare)
 	if createErr := globalUtils.CreateDirectory(
-		fmt.Sprintf("%s/%s/%s", cs.nodeConfig.BaseDir, dirName, config.DirectoryShare),
+		shareDirectory,
 	); createErr != nil {
 		return createErr
 	}
 
+	fileLister := files.NewFileLister(
+		cs.logger,
+		shareDirectory,
+		time.Second*5,
+	)
+
+	cs.registerFileLister(mnemonic, fileLister)
+
 	return nil
+}
+
+// registerFileLister registers a new file lister
+func (cs *ClientServer) registerFileLister(mnemonic string, fileLister *files.FileLister) {
+	cs.fileListerMux.Lock()
+	defer cs.fileListerMux.Unlock()
+
+	cs.fileListerMap[mnemonic] = fileLister
 }
 
 // findPeersWrapper is a wrapper function for starting the find peers service
