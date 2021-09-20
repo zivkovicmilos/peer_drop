@@ -24,7 +24,7 @@ type FileLister struct {
 	baseDir string
 
 	fileMap    map[string]*proto.File // checksum -> file
-	fileMapMux sync.Mutex
+	fileMapMux sync.RWMutex
 
 	sweepInterval time.Duration
 
@@ -142,8 +142,8 @@ func (fl *FileLister) checksumFile(path string) (string, error) {
 
 // GetFileInfo returns the file information
 func (fl *FileLister) GetFileInfo(checksum string) (*proto.File, error) {
-	fl.fileMapMux.Lock()
-	defer fl.fileMapMux.Unlock()
+	fl.fileMapMux.RLock()
+	defer fl.fileMapMux.RUnlock()
 
 	file, _ := fl.fileMap[checksum]
 
@@ -168,8 +168,8 @@ func (fl *FileLister) removeFile(checksum string) {
 
 // GetAvailableFiles returns the available files for sharing in the workspace
 func (fl *FileLister) GetAvailableFiles() []*proto.File {
-	fl.fileMapMux.Lock()
-	defer fl.fileMapMux.Unlock()
+	fl.fileMapMux.RLock()
+	defer fl.fileMapMux.RUnlock()
 
 	fileList := make([]*proto.File, 0)
 

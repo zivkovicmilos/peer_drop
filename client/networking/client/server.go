@@ -27,7 +27,7 @@ import (
 	"github.com/multiformats/go-multiaddr"
 	"github.com/zivkovicmilos/peer_drop/config"
 	localCrypto "github.com/zivkovicmilos/peer_drop/crypto"
-	"github.com/zivkovicmilos/peer_drop/networking/files"
+	"github.com/zivkovicmilos/peer_drop/files"
 	"github.com/zivkovicmilos/peer_drop/proto"
 	"github.com/zivkovicmilos/peer_drop/rest/types"
 	"github.com/zivkovicmilos/peer_drop/rest/utils"
@@ -55,15 +55,17 @@ type ClientServer struct {
 	workspaceDirectoryMap map[string]string               // In memory map of workspace directories on disk (mnemonic -> dirName)
 
 	// File handling //
-	fileListerMap map[string]*files.FileLister // In memory map of file lister services (mnemonic -> fileLister)
+	fileListerMap     map[string]*files.FileLister     // In memory map of file lister services (mnemonic -> fileLister)
+	fileAggregatorMap map[string]*files.FileAggregator // In memory map of file aggregator services (mnemonic -> fileAggregator)
 
 	// Workspace handler //
 	newWorkspaceChannel chan *proto.WorkspaceInfo
 
 	// Locks //
-	rendezvousMux    sync.Mutex
-	verifiedPeersMux sync.Mutex // a mux map would be a better solution
-	fileListerMux    sync.RWMutex
+	rendezvousMux        sync.RWMutex
+	verifiedPeersMuxMap  map[string]sync.RWMutex // mnemonic -> rwmutex
+	fileListerMuxMap     map[string]sync.RWMutex // mnemonic -> rwmutex
+	fileAggregatorMuxMap map[string]sync.RWMutex // mnemonic -> rwmutex
 
 	// Context //
 	ctx        context.Context
@@ -82,15 +84,19 @@ func NewClientServer(
 	nodeConfig *config.NodeConfig,
 ) *ClientServer {
 	return &ClientServer{
-		logger:              logger.Named("networking"),
-		nodeConfig:          nodeConfig,
-		rendezvousIDs:       make([]peer.ID, 0),
-		verifiedPeers:       make(map[string][]peer.ID),
-		joinRequests:        make(map[string]*joinRequest),
-		newWorkspaceChannel: make(chan *proto.WorkspaceInfo),
-		pubsubTopics:        make(map[string]*pubsub.Topic),
-		pubsubSubscriptions: make(map[string]*pubsub.Subscription),
-		fileListerMap:       make(map[string]*files.FileLister),
+		logger:               logger.Named("networking"),
+		nodeConfig:           nodeConfig,
+		rendezvousIDs:        make([]peer.ID, 0),
+		verifiedPeers:        make(map[string][]peer.ID),
+		joinRequests:         make(map[string]*joinRequest),
+		newWorkspaceChannel:  make(chan *proto.WorkspaceInfo),
+		pubsubTopics:         make(map[string]*pubsub.Topic),
+		pubsubSubscriptions:  make(map[string]*pubsub.Subscription),
+		fileListerMap:        make(map[string]*files.FileLister),
+		fileAggregatorMap:    make(map[string]*files.FileAggregator),
+		fileListerMuxMap:     make(map[string]sync.RWMutex),
+		verifiedPeersMuxMap:  make(map[string]sync.RWMutex),
+		fileAggregatorMuxMap: make(map[string]sync.RWMutex),
 	}
 }
 
@@ -346,10 +352,22 @@ func (cs *ClientServer) initializeWorkspaceDirectory(name string, mnemonic strin
 
 // registerFileLister registers a new file lister
 func (cs *ClientServer) registerFileLister(mnemonic string, fileLister *files.FileLister) {
-	cs.fileListerMux.Lock()
-	defer cs.fileListerMux.Unlock()
+	mux, _ := cs.fileListerMuxMap[mnemonic]
+	mux.Lock()
+	defer mux.Unlock()
 
 	cs.fileListerMap[mnemonic] = fileLister
+
+	fileLister.Start()
+}
+
+// unregisterFileLister unregisters a file lister
+func (cs *ClientServer) unregisterFileLister(mnemonic string) {
+	mux, _ := cs.fileListerMuxMap[mnemonic]
+	mux.Lock()
+	defer mux.Unlock()
+
+	delete(cs.fileListerMap, mnemonic)
 }
 
 // findPeersWrapper is a wrapper function for starting the find peers service
@@ -372,10 +390,32 @@ func (cs *ClientServer) findPeersWrapper(workspaceInfo *proto.WorkspaceInfo) err
 	return nil
 }
 
+// unregisterFileAggregator removes / stops a file aggregator service
+func (cs *ClientServer) unregisterFileAggregator(mnemonic string) {
+	mux, _ := cs.fileAggregatorMuxMap[mnemonic]
+	mux.Lock()
+	fileAggregator := cs.fileAggregatorMap[mnemonic]
+
+	delete(cs.fileAggregatorMap, mnemonic)
+	fileAggregator.Stop()
+	mux.Unlock()
+}
+
 // startSubscriptionListener starts the subscription listener for a workspace mnemonic
 func (cs *ClientServer) startSubscriptionListener(mnemonic string) {
 	subscription := cs.pubsubSubscriptions[mnemonic]
 	subContext := context.Background()
+
+	// Create the file aggregator instance
+	updateChannel := make(chan files.FileListWrapper)
+	fileAggregator := files.NewFileAggregator(cs.logger, mnemonic, updateChannel)
+
+	mux, _ := cs.fileAggregatorMuxMap[mnemonic]
+	mux.Lock()
+	cs.fileAggregatorMap[mnemonic] = fileAggregator
+	mux.Unlock()
+
+	fileAggregator.Start()
 
 	for {
 		fileListMessage, err := subscription.Next(subContext)
@@ -398,7 +438,10 @@ func (cs *ClientServer) startSubscriptionListener(mnemonic string) {
 			continue
 		}
 
-		// TODO pass this data off to our file handler service
+		updateChannel <- files.FileListWrapper{
+			FileList: peerFileList,
+			PeerID:   fileListMessage.ReceivedFrom,
+		}
 	}
 }
 
@@ -495,7 +538,9 @@ func (cs *ClientServer) dialRendezvous() {
 				cs.logger.Error(fmt.Sprintf("Unable to connect to rendezvous node (%s), %v", *peerinfo, err))
 			} else {
 				cs.logger.Info(fmt.Sprintf("Successfully connected to rendezvous node %s", *peerinfo))
+				cs.rendezvousMux.Lock()
 				cs.rendezvousIDs = append(cs.rendezvousIDs, peerinfo.ID)
+				cs.rendezvousMux.Unlock()
 			}
 		}()
 	}
@@ -534,6 +579,9 @@ func (cs *ClientServer) GetWorkspaceInfo(mnemonic string) (*proto.WorkspaceInfo,
 
 // findBestRendezvous finds the best suitable rendezvous node
 func (cs *ClientServer) findBestRendezvous() (*peer.ID, error) {
+	cs.rendezvousMux.Lock()
+	defer cs.rendezvousMux.Unlock()
+
 	for indx, peerID := range cs.rendezvousIDs {
 		if cs.host.Network().Connectedness(peerID) == network.Connected {
 			return &peerID, nil
@@ -704,8 +752,9 @@ type handshakeInfo struct {
 
 // isVerifiedPeer checks if the peer is verified for that workspace
 func (cs *ClientServer) isVerifiedPeer(peerID peer.ID, mnemonic string) bool {
-	cs.verifiedPeersMux.Lock()
-	defer cs.verifiedPeersMux.Unlock()
+	mux, _ := cs.verifiedPeersMuxMap[mnemonic]
+	mux.RLock()
+	defer mux.RUnlock()
 
 	verifiedPeers, ok := cs.verifiedPeers[mnemonic]
 	if !ok {
@@ -958,8 +1007,9 @@ func (cs *ClientServer) FinishVerification(
 
 // addVerifiedPeer adds a verified peer. [Thread safe]
 func (cs *ClientServer) addVerifiedPeer(mnemonic string, newPeer peer.ID) {
-	cs.verifiedPeersMux.Lock()
-	defer cs.verifiedPeersMux.Unlock()
+	mux, _ := cs.verifiedPeersMuxMap[mnemonic]
+	mux.Lock()
+	defer mux.Unlock()
 
 	verifiedPeers, ok := cs.verifiedPeers[mnemonic]
 	if !ok {
@@ -972,8 +1022,9 @@ func (cs *ClientServer) addVerifiedPeer(mnemonic string, newPeer peer.ID) {
 }
 
 func (cs *ClientServer) removeVerifiedPeer(mnemonic string, oldPeer peer.ID) {
-	cs.verifiedPeersMux.Lock()
-	defer cs.verifiedPeersMux.Unlock()
+	mux, _ := cs.verifiedPeersMuxMap[mnemonic]
+	mux.Lock()
+	defer mux.Unlock()
 
 	verifiedPeers, ok := cs.verifiedPeers[mnemonic]
 	if !ok {
@@ -982,8 +1033,8 @@ func (cs *ClientServer) removeVerifiedPeer(mnemonic string, oldPeer peer.ID) {
 	}
 
 	indx := -1
-	for index, peer := range verifiedPeers {
-		if peer == oldPeer {
+	for index, verifiedPeer := range verifiedPeers {
+		if verifiedPeer == oldPeer {
 			indx = index
 		}
 	}
