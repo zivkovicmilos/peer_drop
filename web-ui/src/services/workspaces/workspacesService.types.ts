@@ -21,3 +21,22 @@ export interface INewWorkspaceRequest {
 export interface INewWorkspaceResponse {
   mnemonic: string;
 }
+
+export interface IWorkspaceInfoResponse {
+  name: string;
+  mnemonic: string;
+  workspaceOwnerPublicKeys: string[];
+  securityType: string;
+  workspaceType: string;
+
+  passwordHash?: string;
+  contactsWrapper?: {
+    contactPublicKeys: string[];
+  };
+}
+
+export interface IJoinWorkspaceRequest {
+  mnemonic: string;
+  password: string;
+  publicKeyID: string;
+}

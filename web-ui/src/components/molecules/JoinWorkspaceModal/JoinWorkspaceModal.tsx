@@ -13,6 +13,7 @@ import {
   ENewWorkspaceType,
   ENWAccessControl
 } from '../../../context/newWorkspaceContext.types';
+import { IWorkspaceInfoResponse } from '../../../services/workspaces/workspacesService.types';
 import { ReactComponent as JoinImage } from '../../../shared/assets/icons/undraw_join_of2w.svg';
 import { IJoinWorkspaceModalProps } from './joinWorkspaceModal.types';
 
@@ -23,29 +24,29 @@ const JoinWorkspaceModal: FC<IJoinWorkspaceModalProps> = (props) => {
   const renderAdditionalSettings = () => {
     let additionalSettings = [];
 
-    if (workspaceInfo.permissions.additionalOwners.active) {
-      additionalSettings.push(
-        <Typography key={'additional-owners'} className={classes.reviewItem}>
-          {`Additional workspace owners - ${workspaceInfo.permissions.additionalOwners.contactIDs.length}`}
-        </Typography>
-      );
-    }
-
-    if (workspaceInfo.permissions.autocloseWorkspace.active) {
-      additionalSettings.push(
-        <Typography key={'autoclose'} className={classes.reviewItem}>
-          {`Auto-close workspace - ${workspaceInfo.permissions.autocloseWorkspace.date}`}
-        </Typography>
-      );
-    }
-
-    if (workspaceInfo.permissions.enforcePeerLimit.active) {
-      additionalSettings.push(
-        <Typography key={'peer-limit'} className={classes.reviewItem}>
-          {`Enforce peer limit - ${workspaceInfo.permissions.enforcePeerLimit.limit}`}
-        </Typography>
-      );
-    }
+    // if (workspaceInfo.permissions.additionalOwners.active) {
+    //   additionalSettings.push(
+    //     <Typography key={'additional-owners'} className={classes.reviewItem}>
+    //       {`Additional workspace owners - ${workspaceInfo.permissions.additionalOwners.contactIDs.length}`}
+    //     </Typography>
+    //   );
+    // }
+    //
+    // if (workspaceInfo.permissions.autocloseWorkspace.active) {
+    //   additionalSettings.push(
+    //     <Typography key={'autoclose'} className={classes.reviewItem}>
+    //       {`Auto-close workspace - ${workspaceInfo.permissions.autocloseWorkspace.date}`}
+    //     </Typography>
+    //   );
+    // }
+    //
+    // if (workspaceInfo.permissions.enforcePeerLimit.active) {
+    //   additionalSettings.push(
+    //     <Typography key={'peer-limit'} className={classes.reviewItem}>
+    //       {`Enforce peer limit - ${workspaceInfo.permissions.enforcePeerLimit.limit}`}
+    //     </Typography>
+    //   );
+    // }
 
     if (additionalSettings.length < 1) {
       additionalSettings.push(
@@ -56,6 +57,39 @@ const JoinWorkspaceModal: FC<IJoinWorkspaceModalProps> = (props) => {
     }
 
     return additionalSettings;
+  };
+
+  const convertWorkspaceType = (type: string): ENewWorkspaceType => {
+    switch (type) {
+      case 'send-only':
+        return ENewWorkspaceType.SEND_ONLY;
+      case 'receive-only':
+        return ENewWorkspaceType.RECEIVE_ONLY;
+      default:
+        return ENewWorkspaceType.SEND_RECEIVE;
+    }
+  };
+
+  const convertAccessControlType = (type: string): ENWAccessControl => {
+    if (type == 'password') {
+      return ENWAccessControl.PASSWORD;
+    } else {
+      return ENWAccessControl.SPECIFIC_CONTACTS;
+    }
+  };
+
+  const convertAccessControl = (
+    workspaceInfo: IWorkspaceInfoResponse
+  ): { contacts: string[] } | { password: string } => {
+    if (workspaceInfo.passwordHash) {
+      return {
+        password: workspaceInfo.passwordHash
+      };
+    } else {
+      return {
+        contacts: workspaceInfo.contactsWrapper.contactPublicKeys
+      };
+    }
   };
 
   const renderBaseSettings = () => {
@@ -88,7 +122,10 @@ const JoinWorkspaceModal: FC<IJoinWorkspaceModalProps> = (props) => {
       }
     }
 
-    if (workspaceInfo.accessControlType == ENWAccessControl.PASSWORD) {
+    if (
+      convertAccessControlType(workspaceInfo.securityType) ==
+      ENWAccessControl.PASSWORD
+    ) {
       baseSettings.push(
         <Typography key={'access-password'} className={classes.reviewItem}>
           {ENWAccessControl.PASSWORD}
@@ -105,65 +142,69 @@ const JoinWorkspaceModal: FC<IJoinWorkspaceModalProps> = (props) => {
     return baseSettings;
   };
 
-  return (
-    <Modal
-      className={classes.modal}
-      open={open}
-      onClose={() => handleConfirm(false)}
-      closeAfterTransition
-      BackdropComponent={Backdrop}
-      BackdropProps={{
-        timeout: 500
-      }}
-    >
-      <Fade in={open}>
-        <div className={classes.modalWrapper}>
-          <Box
-            display={'flex'}
-            alignItems={'center'}
-            justifyContent={'space-between'}
-          >
-            <Typography className={classes.modalTitle}>
-              Joined workspace!
-            </Typography>
-            <IconButton
-              classes={{
-                root: 'iconButtonRoot'
-              }}
-              onClick={() => handleConfirm(false)}
+  if (workspaceInfo) {
+    return (
+      <Modal
+        className={classes.modal}
+        open={open}
+        onClose={() => handleConfirm(false)}
+        closeAfterTransition
+        BackdropComponent={Backdrop}
+        BackdropProps={{
+          timeout: 500
+        }}
+      >
+        <Fade in={open}>
+          <div className={classes.modalWrapper}>
+            <Box
+              display={'flex'}
+              alignItems={'center'}
+              justifyContent={'space-between'}
             >
-              <CloseRoundedIcon
-                style={{
-                  width: '20px',
-                  height: 'auto'
+              <Typography className={classes.modalTitle}>
+                Joined workspace!
+              </Typography>
+              <IconButton
+                classes={{
+                  root: 'iconButtonRoot'
                 }}
-              />
-            </IconButton>
-          </Box>
-          <Box display={'flex'} mt={2} width={'100%'}>
-            <Box display={'flex'} flexDirection={'column'}>
-              <Typography>You've joined the workspace:</Typography>
-              <Box my={1}>
-                <Typography className={classes.workspaceName}>
-                  {workspaceInfo.workspaceName}
-                </Typography>
+                onClick={() => handleConfirm(false)}
+              >
+                <CloseRoundedIcon
+                  style={{
+                    width: '20px',
+                    height: 'auto'
+                  }}
+                />
+              </IconButton>
+            </Box>
+            <Box display={'flex'} mt={2} width={'100%'}>
+              <Box display={'flex'} flexDirection={'column'}>
+                <Typography>You've joined the workspace:</Typography>
+                <Box my={1}>
+                  <Typography className={classes.workspaceName}>
+                    {workspaceInfo.name}
+                  </Typography>
+                </Box>
+                {renderBaseSettings()}
+                {renderAdditionalSettings()}
               </Box>
-              {renderBaseSettings()}
-              {renderAdditionalSettings()}
+              <Box ml={'auto'}>
+                <JoinImage
+                  style={{
+                    width: '250px',
+                    height: 'auto'
+                  }}
+                />
+              </Box>
             </Box>
-            <Box ml={'auto'}>
-              <JoinImage
-                style={{
-                  width: '250px',
-                  height: 'auto'
-                }}
-              />
-            </Box>
-          </Box>
-        </div>
-      </Fade>
-    </Modal>
-  );
+          </div>
+        </Fade>
+      </Modal>
+    );
+  } else {
+    return null;
+  }
 };
 
 const useStyles = makeStyles((theme) => {

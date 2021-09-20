@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+option go_package = "/proto";
+
+// FileList represents an array of files
+message FileList {
+  repeated File file_list = 1;
+}
+
+// File is the representation of a local file on a
+// remote system
+message File {
+  string name = 1;
+  string extension = 2;
+  int64 size = 3;            // in bytes
+  int64 date_modified = 4;
+  string file_checksum = 5; // used to differentiate files with same name / extension
+}

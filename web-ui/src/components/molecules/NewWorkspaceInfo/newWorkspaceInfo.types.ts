@@ -9,7 +9,10 @@ import {
 export interface INewWorkspaceInfoProps {
   workspaceName: string;
   workspaceType: ENewWorkspaceType;
-  accessControl: INWAccessControlContacts | INWAccessControlPassword;
-  permissions: INWPermissions;
+  accessControl:
+    | INWAccessControlContacts
+    | INWAccessControlPassword
+    | { contacts: string[] };
+  permissions?: INWPermissions;
   accessControlType: ENWAccessControl;
 }

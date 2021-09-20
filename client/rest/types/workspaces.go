@@ -18,3 +18,16 @@ type NewWorkspaceACType struct {
 type NewWorkspaceResponse struct {
 	Mnemonic string `json:"mnemonic"`
 }
+
+type JoinWorkspaceRequest struct {
+	Mnemonic    string `json:"mnemonic"`
+	Password    string `json:"password"`
+	PublicKeyID string `json:"publicKeyID"`
+}
+
+type WorkspaceCredentials struct {
+	Mnemonic   string
+	PublicKey  *string
+	PrivateKey *string
+	Password   *string
+}

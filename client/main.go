@@ -16,6 +16,7 @@ import (
 	"github.com/zivkovicmilos/peer_drop/rest/dispatcher"
 	servicehandler "github.com/zivkovicmilos/peer_drop/service-handler"
 	"github.com/zivkovicmilos/peer_drop/storage"
+	"github.com/zivkovicmilos/peer_drop/utils"
 )
 
 type RendezvousNodes []string
@@ -67,7 +68,7 @@ func main() {
 	flag.Parse()
 
 	// Set up the base directory
-	directoryError := createDirectory(fmt.Sprintf("%s/%s", *baseDirPtr, config.DirectoryStorage))
+	directoryError := utils.CreateDirectory(fmt.Sprintf("%s/%s", *baseDirPtr, config.DirectoryStorage))
 	if directoryError != nil {
 		os.Exit(1)
 	}
@@ -124,13 +125,13 @@ func main() {
 // setupAsClient sets up the current peer_drop. node as a client
 func setupAsClient(logger hclog.Logger, nodeConfig *config.NodeConfig) {
 	// Set up the directories
-	if directoryError := createDirectory(
+	if directoryError := utils.CreateDirectory(
 		fmt.Sprintf("%s/%s", nodeConfig.BaseDir, config.DirectoryFiles),
 	); directoryError != nil {
 		os.Exit(1)
 	}
 
-	if directoryError := createDirectory(
+	if directoryError := utils.CreateDirectory(
 		fmt.Sprintf("%s/%s", nodeConfig.BaseDir, config.DirectoryLibp2p),
 	); directoryError != nil {
 		os.Exit(1)
@@ -158,7 +159,7 @@ func setupAsRendezvous(
 	rendezvousConfig *config.RendezvousConfig,
 ) {
 	// Set up the directories
-	if directoryError := createDirectory(
+	if directoryError := utils.CreateDirectory(
 		fmt.Sprintf("%s/%s", nodeConfig.BaseDir, config.DirectoryLibp2p),
 	); directoryError != nil {
 		os.Exit(1)
@@ -172,15 +173,4 @@ func setupAsRendezvous(
 	)
 
 	rendezvousServer.Start(servicehandler.GetServiceHandler().RegisterCloseListener("rendezvous"))
-}
-
-// createDirectory creates a single directory
-func createDirectory(path string) error {
-	err := os.MkdirAll(path, os.ModeDir)
-
-	if err == nil || os.IsExist(err) {
-		return nil
-	} else {
-		return err
-	}
 }

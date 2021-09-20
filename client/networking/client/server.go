@@ -3,14 +3,17 @@ package client
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/golang/protobuf/jsonpb"
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-hclog"
 	"github.com/libp2p/go-libp2p"
@@ -20,12 +23,15 @@ import (
 	"github.com/libp2p/go-libp2p-core/protocol"
 	discovery "github.com/libp2p/go-libp2p-discovery"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/zivkovicmilos/peer_drop/config"
 	localCrypto "github.com/zivkovicmilos/peer_drop/crypto"
 	"github.com/zivkovicmilos/peer_drop/proto"
 	"github.com/zivkovicmilos/peer_drop/rest/types"
+	"github.com/zivkovicmilos/peer_drop/rest/utils"
 	"github.com/zivkovicmilos/peer_drop/storage"
+	globalUtils "github.com/zivkovicmilos/peer_drop/utils"
 	"google.golang.org/grpc"
 )
 
@@ -35,13 +41,20 @@ type ClientServer struct {
 	closeChannel chan struct{}
 
 	// Networking metadata //
-	me               peer.ID              // the current node's peer ID
-	host             host.Host            // the reference to the libp2p host
-	rendezvousIDs    []peer.ID            // the peer IDs of the rendezvous nodes
-	verifiedPeers    map[string][]peer.ID // the peer IDs of nodes who've passed verification for the given mnemonic
-	pendingPeers     sync.Map             // peers awaiting verification. Only a single verification request is processed per user
-	pendingPeersSize int64
-	kademliaDHT      *dht.IpfsDHT
+	me                    peer.ID              // the current node's peer ID
+	host                  host.Host            // the reference to the libp2p host
+	rendezvousIDs         []peer.ID            // the peer IDs of the rendezvous nodes
+	verifiedPeers         map[string][]peer.ID // the peer IDs of nodes who've passed verification for the given mnemonic
+	pendingPeers          sync.Map             // peers awaiting verification. Only a single verification request is processed per user
+	pendingPeersSize      int64
+	kademliaDHT           *dht.IpfsDHT
+	pubSub                *pubsub.PubSub                  // Reference to the pubsub service
+	pubsubSubscriptions   map[string]*pubsub.Subscription // In memory map of active subscriptions
+	pubsubTopics          map[string]*pubsub.Topic        // In memory map of active topics
+	workspaceDirectoryMap map[string]string               // In memory mapping of workspace directories on disk (mnemonic -> dirName)
+
+	// Workspace handler //
+	newWorkspaceChannel chan *proto.WorkspaceInfo
 
 	// Locks //
 	rendezvousMux    sync.Mutex
@@ -64,11 +77,14 @@ func NewClientServer(
 	nodeConfig *config.NodeConfig,
 ) *ClientServer {
 	return &ClientServer{
-		logger:        logger.Named("networking"),
-		nodeConfig:    nodeConfig,
-		rendezvousIDs: make([]peer.ID, 0),
-		verifiedPeers: make(map[string][]peer.ID),
-		joinRequests:  make(map[string]*joinRequest),
+		logger:              logger.Named("networking"),
+		nodeConfig:          nodeConfig,
+		rendezvousIDs:       make([]peer.ID, 0),
+		verifiedPeers:       make(map[string][]peer.ID),
+		joinRequests:        make(map[string]*joinRequest),
+		newWorkspaceChannel: make(chan *proto.WorkspaceInfo),
+		pubsubTopics:        make(map[string]*pubsub.Topic),
+		pubsubSubscriptions: make(map[string]*pubsub.Subscription),
 	}
 }
 
@@ -171,6 +187,256 @@ func (cs *ClientServer) Start(closeChannel chan struct{}) {
 	cs.dialRendezvous()
 
 	<-closeChannel
+}
+
+// workspaceHandler handles incoming workspace join messages and starts the
+// appropriate loops
+func (cs *ClientServer) workspaceHandler() {
+	for {
+		// Wait for workspace join messages
+		workspaceInfo := <-cs.newWorkspaceChannel
+
+		// Initialize the workspace
+		go func() {
+			err := cs.initializeWorkspace(workspaceInfo)
+			if err != nil {
+				cs.logger.Error(fmt.Sprintf("Unable to initialize workspace, %v", err))
+
+				return
+			}
+
+			cs.logger.Info(fmt.Sprintf("Successfully initialized workspace %s", workspaceInfo.Name))
+		}()
+	}
+}
+
+// startPeerDropService is the method that starts up the pubsub mechanism
+// for sharing file lists
+func (cs *ClientServer) startPeerDropService() error {
+	// Grab all the available workspaces on this node
+	foundWorkspaces, totalWorkspaces, findErr := storage.GetStorageHandler().GetWorkspaces(utils.NoPagination)
+	if findErr != nil {
+		return findErr
+	}
+	cs.logger.Info(fmt.Sprintf("Found a total of %d workspaces", totalWorkspaces))
+
+	// Create the pubsub instance
+	pubSub, gossipErr := pubsub.NewGossipSub(cs.ctx, cs.host)
+	if gossipErr != nil {
+		return gossipErr
+	}
+	cs.pubSub = pubSub
+
+	// For each individual workspace, initialize it
+	for _, workspaceInfo := range foundWorkspaces {
+		go func(workspaceInfo *proto.WorkspaceInfo) {
+			err := cs.initializeWorkspace(workspaceInfo)
+			if err != nil {
+				cs.logger.Error(fmt.Sprintf("Unable to initialize workspace, %v", err))
+			}
+		}(workspaceInfo)
+	}
+
+	return nil
+}
+
+// initializeWorkspace initializes the publishers / listeners for an individual workspace
+func (cs *ClientServer) initializeWorkspace(workspaceInfo *proto.WorkspaceInfo) error {
+	mnemonic := workspaceInfo.Mnemonic
+	// Create the folder structure if it doesn't exist
+	if directoryErr := cs.initializeWorkspaceDirectory(workspaceInfo.Name); directoryErr != nil {
+		cs.logger.Error(
+			fmt.Sprintf("Unable to initialize directory for %s, %v", workspaceInfo.Name, directoryErr),
+		)
+
+		return directoryErr
+	}
+
+	// Start the find peers service
+	if findPeersErr := cs.findPeersWrapper(workspaceInfo); findPeersErr != nil {
+		cs.logger.Error(
+			fmt.Sprintf("Unable to start find peers service, %v", findPeersErr),
+		)
+
+		return findPeersErr
+	}
+
+	pubSubTopic, err := cs.pubSub.Join(workspaceInfo.Mnemonic)
+	if err != nil {
+		return fmt.Errorf("unable to join topic, %v", err)
+	}
+
+	pubSubSubscription, err := pubSubTopic.Subscribe()
+	if err != nil {
+		return fmt.Errorf("unable to subscribe to topic, %v", err)
+	}
+
+	// Update the in memory map values
+	cs.pubsubSubscriptions[workspaceInfo.Mnemonic] = pubSubSubscription
+	cs.pubsubTopics[workspaceInfo.Mnemonic] = pubSubTopic
+
+	// Check if we are the owner of this workspace
+	amOwner := cs.amIWorkspaceOwner(workspaceInfo)
+
+	switch workspaceInfo.WorkspaceType {
+	case config.WORKSPACE_TYPE_SEND_ONLY:
+		if amOwner {
+			// If we are the owner of this workspace, we only listen for messages
+			go cs.startSubscriptionListener(mnemonic)
+		} else {
+			// If we are not the owner of this workspace, we only send messages
+			go cs.startTopicPublisher(mnemonic)
+		}
+	case config.WORKSPACE_TYPE_RECEIVE_ONLY:
+		if amOwner {
+			// If we are the owner of this workspace, we only send messages
+			go cs.startTopicPublisher(mnemonic)
+		} else {
+			// If we are not the owner of this workspace, we only receive messages
+			go cs.startSubscriptionListener(mnemonic)
+		}
+	default:
+		// Send & Receive
+		go cs.startSubscriptionListener(mnemonic)
+		go cs.startTopicPublisher(mnemonic)
+	}
+
+	return nil
+}
+
+// initializeWorkspaceDirectory creates the workspace directory in the folder structure
+func (cs *ClientServer) initializeWorkspaceDirectory(name string) error {
+	// Lowercase the directory name
+	dirName := strings.ToLower(name)
+	dirName = strings.Replace(dirName, " ", "-", -1)
+
+	// baseDir/workspaceName/temp
+	// Directory is used for temporary download data
+	if createErr := globalUtils.CreateDirectory(
+		fmt.Sprintf("%s/%s/%s", cs.nodeConfig.BaseDir, dirName, config.DirectoryTemp),
+	); createErr != nil {
+		return createErr
+	}
+
+	// baseDir/workspaceName/share
+	// Directory is used for sharing node local files
+	if createErr := globalUtils.CreateDirectory(
+		fmt.Sprintf("%s/%s/%s", cs.nodeConfig.BaseDir, dirName, config.DirectoryShare),
+	); createErr != nil {
+		return createErr
+	}
+
+	return nil
+}
+
+// findPeersWrapper is a wrapper function for starting the find peers service
+// for a specific workspace
+func (cs *ClientServer) findPeersWrapper(workspaceInfo *proto.WorkspaceInfo) error {
+	// Contains necessary information to perform new peer handshakes
+	var info *handshakeInfo
+
+	workspaceCredentials, getErr := storage.GetStorageHandler().GetWorkspaceCredentials(workspaceInfo.Mnemonic)
+	if getErr != nil {
+		return getErr
+	}
+
+	info.publicKey = workspaceCredentials.PublicKey
+	info.privateKey = workspaceCredentials.PrivateKey
+	info.password = workspaceCredentials.Password
+
+	go cs.findPeers(workspaceInfo.Mnemonic, info)
+
+	return nil
+}
+
+// startSubscriptionListener starts the subscription listener for a workspace mnemonic
+func (cs *ClientServer) startSubscriptionListener(mnemonic string) {
+	subscription := cs.pubsubSubscriptions[mnemonic]
+	subContext := context.Background()
+
+	for {
+		fileListMessage, err := subscription.Next(subContext)
+		if err != nil {
+			cs.logger.Error(fmt.Sprintf("Unable to parse message, %v", err))
+			return
+		}
+		cs.logger.Info("Received a new pubsub message for mnemonic ", mnemonic)
+
+		// Forward messages that are not from us
+		if fileListMessage.ReceivedFrom == cs.me {
+			cs.logger.Info("Pubsub message skipped")
+			continue
+		}
+
+		peerFileList := new(proto.FileList)
+		err = jsonpb.Unmarshal(bytes.NewReader(fileListMessage.Data), peerFileList)
+		if err != nil {
+			cs.logger.Error(fmt.Sprintf("Unmarshal error %v", err))
+			continue
+		}
+
+		// TODO pass this data off to our file handler service
+	}
+}
+
+// startTopicPublisher starts up the file list sharing loop
+func (cs *ClientServer) startTopicPublisher(mnemonic string) {
+	topic := cs.pubsubTopics[mnemonic]
+	topicContext := context.Background()
+	ticker := time.NewTicker(time.Second * 5)
+
+	for {
+		select {
+		case _ = <-ticker.C:
+			// Every 5 seconds, share the file list
+
+			// Compile file list
+			// TODO
+			var fileList *proto.FileList
+
+			// Share the file list to the topic
+			marshaler := jsonpb.Marshaler{}
+			buf := new(bytes.Buffer)
+			err := marshaler.Marshal(buf, fileList)
+			if err != nil {
+				cs.logger.Error(fmt.Sprintf("Unable to marshal file list, %v", err))
+				continue
+			}
+
+			sendErr := topic.Publish(topicContext, buf.Bytes())
+			if sendErr != nil {
+				cs.logger.Error(fmt.Sprintf("Unable to publish local file list, %v", sendErr))
+				continue
+			}
+
+			cs.logger.Info("Workspace file list successfully published")
+		}
+	}
+}
+
+// amIWorkspaceOwner
+func (cs *ClientServer) amIWorkspaceOwner(info *proto.WorkspaceInfo) bool {
+	// Range over the public keys of the workspace owners and check
+	// if the current node is the owner of one of these keys
+	identities, count, findErr := storage.GetStorageHandler().GetIdentities(utils.NoPagination, utils.DefaultSort)
+	if findErr != nil {
+		cs.logger.Error(fmt.Sprintf("Unable to fetch identities, %v", findErr))
+	}
+
+	if count == 0 {
+		cs.logger.Error("No identity detected")
+		panic("Invalid situation")
+	}
+
+	for _, workspaceOwnerPK := range info.WorkspaceOwnerPublicKeys {
+		for _, identity := range identities {
+			if identity.PublicKey == workspaceOwnerPK {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 // setupRendezvous sets the initial rendezvous nodes
@@ -298,8 +564,12 @@ func (cs *ClientServer) workspaceRequestToWorkspaceInfo(
 	if workspaceRequest.WorkspaceAccessControlType == "Password" {
 		workspaceInfo.SecurityType = "password"
 
+		// Hash the password, then hash the hash
+		// Bad idea, but it will work for now
+		passwordHash := localCrypto.NewSHA256([]byte(workspaceRequest.WorkspaceAccessControl.Password))
+		passwordHash = localCrypto.NewSHA256(passwordHash)
 		workspaceInfo.SecuritySettings = &proto.WorkspaceInfo_PasswordHash{
-			PasswordHash: workspaceRequest.WorkspaceAccessControl.Password,
+			PasswordHash: hex.EncodeToString(passwordHash),
 		}
 	} else {
 		contactPublicKeys := make([]string, 0)
@@ -361,6 +631,7 @@ func (cs *ClientServer) findPeers(workspaceMnemonic string, info *handshakeInfo)
 			}
 
 			// Attempt to verify these peers
+			// TODO make sure this is not infinite
 			for foundPeer := range peerChan {
 				if foundPeer.ID == cs.me {
 					continue
@@ -698,4 +969,51 @@ func (cs *ClientServer) removeVerifiedPeer(mnemonic string, oldPeer peer.ID) {
 	}
 
 	cs.verifiedPeers[mnemonic] = verifiedPeers
+}
+
+// Workspace joining //
+
+// JoinWorkspacePassword handles workspace join requests with passwords
+func (cs *ClientServer) JoinWorkspacePassword(
+	workspaceInfo *proto.WorkspaceInfo,
+	password string,
+) bool {
+	// Prepare password hash
+	passwordHash := localCrypto.NewSHA256([]byte(password))
+	passwordHash = localCrypto.NewSHA256(passwordHash)
+
+	workspacePasswordHash := workspaceInfo.SecuritySettings.(*proto.WorkspaceInfo_PasswordHash).PasswordHash
+	if workspacePasswordHash == password {
+		// Passwords match
+		// Alert the workspace manager of a new workspace
+		cs.newWorkspaceChannel <- workspaceInfo
+
+		return true
+	}
+
+	return false
+}
+
+// JoinWorkspacePublicKey handles workspace join requests with public keys
+func (cs *ClientServer) JoinWorkspacePublicKey(
+	workspaceInfo *proto.WorkspaceInfo,
+	publicKeyPEM string,
+) bool {
+
+	inSet := false
+
+	contactPublicKeys := workspaceInfo.SecuritySettings.(*proto.WorkspaceInfo_ContactsWrapper).ContactsWrapper.ContactPublicKeys
+	for _, contactPublicKey := range contactPublicKeys {
+		if contactPublicKey == publicKeyPEM {
+			inSet = true
+			break
+		}
+	}
+
+	if inSet {
+		// Alert the workspace manager of a new workspace
+		cs.newWorkspaceChannel <- workspaceInfo
+	}
+
+	return inSet
 }

@@ -22,6 +22,10 @@ const joinWorkspaceSchema = yup.object({
     })
 });
 
+const joinWorkspacePasswordSchema = yup.object({
+  password: yup.string().defined('Password is required')
+});
+
 const nwSecurityPasswordSchema = yup.object({
   accessControlType: yup.string().defined(),
   password: yup.string().when('accessControlType', {
@@ -82,5 +86,6 @@ export {
   nwSecurityPasswordSchema,
   nwParametersSchema,
   nwPermissionsSchema,
-  joinWorkspaceSchema
+  joinWorkspaceSchema,
+  joinWorkspacePasswordSchema
 };

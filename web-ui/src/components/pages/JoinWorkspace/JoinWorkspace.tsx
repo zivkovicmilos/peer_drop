@@ -4,12 +4,15 @@ import ArrowBackRoundedIcon from '@material-ui/icons/ArrowBackRounded';
 import RefreshRoundedIcon from '@material-ui/icons/RefreshRounded';
 import WifiTetheringRoundedIcon from '@material-ui/icons/WifiTetheringRounded';
 import { useFormik } from 'formik';
-import React, { FC, useEffect, useState } from 'react';
+import React, { FC, useContext, useEffect, useState } from 'react';
 import { useHistory } from 'react-router-dom';
 import {
   ENewWorkspaceType,
   ENWAccessControl
 } from '../../../context/newWorkspaceContext.types';
+import SessionContext from '../../../context/SessionContext';
+import WorkspacesService from '../../../services/workspaces/workspacesService';
+import { IWorkspaceInfoResponse } from '../../../services/workspaces/workspacesService.types';
 import { joinWorkspaceSchema } from '../../../shared/schemas/workspaceSchemas';
 import theme from '../../../theme/theme';
 import ActionButton from '../../atoms/ActionButton/ActionButton';
@@ -18,7 +21,9 @@ import Link from '../../atoms/Link/Link';
 import LoadingIndicator from '../../atoms/LoadingIndicator/LoadingIndicator';
 import PageTitle from '../../atoms/PageTitle/PageTitle';
 import JoinWorkspaceModal from '../../molecules/JoinWorkspaceModal/JoinWorkspaceModal';
+import JoinWorkspacePasswordModal from '../../molecules/JoinWorkspacePasswordModal/JoinWorkspacePasswordModal';
 import NewWorkspaceInfo from '../../molecules/NewWorkspaceInfo/NewWorkspaceInfo';
+import useSnackbar from '../../molecules/Snackbar/useSnackbar.hook';
 import { IJoinWorkspaceProps, WorkspaceInfo } from './joinWorkspace.types';
 
 const JoinWorkspace: FC<IJoinWorkspaceProps> = () => {
@@ -42,19 +47,29 @@ const JoinWorkspace: FC<IJoinWorkspaceProps> = () => {
     accessControlType: ENWAccessControl.PASSWORD
   };
 
+  const { openSnackbar } = useSnackbar();
+
   const connectionFormik = useFormik({
     initialValues: {
       workspaceMnemonic: ''
     },
     validationSchema: joinWorkspaceSchema,
     onSubmit: (values, { resetForm }) => {
-      // TODO trigger connection fetch
+      const fetchWorkspaceInfo = async () => {
+        return await WorkspacesService.getWorkspaceInfo(
+          values.workspaceMnemonic
+        );
+      };
 
       setJoinState(JOIN_STATE.FETCH_INFO);
 
-      setTimeout(() => {
-        setWorkspaceInfo(blankWorkspaceInfo);
-      }, 5000);
+      fetchWorkspaceInfo()
+        .then((response) => {
+          setWorkspaceInfo(response);
+        })
+        .catch((err) => {
+          openSnackbar('Unable to fetch workspace info', 'error');
+        });
     }
   });
 
@@ -70,12 +85,45 @@ const JoinWorkspace: FC<IJoinWorkspaceProps> = () => {
   );
 
   const [workspaceInfo, setWorkspaceInfo] =
-    useState<WorkspaceInfo>(blankWorkspaceInfo);
+    useState<IWorkspaceInfoResponse>(null);
   const [joinState, setJoinState] = useState<JOIN_STATE>(
     JOIN_STATE.ENTER_MNEMONIC
   );
 
   const classes = useStyles();
+
+  const convertWorkspaceType = (type: string): ENewWorkspaceType => {
+    switch (type) {
+      case 'send-only':
+        return ENewWorkspaceType.SEND_ONLY;
+      case 'receive-only':
+        return ENewWorkspaceType.RECEIVE_ONLY;
+      default:
+        return ENewWorkspaceType.SEND_RECEIVE;
+    }
+  };
+
+  const convertAccessControlType = (type: string): ENWAccessControl => {
+    if (type == 'password') {
+      return ENWAccessControl.PASSWORD;
+    } else {
+      return ENWAccessControl.SPECIFIC_CONTACTS;
+    }
+  };
+
+  const convertAccessControl = (
+    workspaceInfo: IWorkspaceInfoResponse
+  ): { contacts: string[] } | { password: string } => {
+    if (workspaceInfo.passwordHash) {
+      return {
+        password: workspaceInfo.passwordHash
+      };
+    } else {
+      return {
+        contacts: workspaceInfo.contactsWrapper.contactPublicKeys
+      };
+    }
+  };
 
   useEffect(() => {
     if (joinState == JOIN_STATE.FETCH_INFO) {
@@ -90,8 +138,55 @@ const JoinWorkspace: FC<IJoinWorkspaceProps> = () => {
     }
   }, [joinState]);
 
+  const { userIdentity } = useContext(SessionContext);
+
+  const handleWorkspaceJoinInner = (password?: string) => {
+    const joinWorkspace = async () => {
+      return await WorkspacesService.joinWorkspace({
+        mnemonic: workspaceInfo.mnemonic,
+        password: password ? password : '',
+        publicKeyID: userIdentity.publicKeyID
+      });
+    };
+
+    joinWorkspace()
+      .then((response) => {
+        openSnackbar('Successfully joined the workspace', 'success');
+        setConfirmOpen(true);
+
+        history.push('/workspaces');
+      })
+      .catch((err) => {
+        openSnackbar('Unable to join the workspace', 'error');
+      });
+  };
+
+  const [passwordModalOpen, setPasswordModalOpen] = useState<boolean>(false);
+
+  const handlePasswordConfirm = (password: string, confirm: boolean) => {
+    setPasswordModalOpen(false);
+
+    if (confirm) {
+      if (password == '' || !password) {
+        openSnackbar('Invalid password', 'error');
+
+        return;
+      }
+
+      handleWorkspaceJoinInner(password);
+    }
+  };
+
   const handleWorkspaceJoin = () => {
-    setConfirmOpen(true);
+    if (
+      convertAccessControlType(workspaceInfo.securityType) ==
+      ENWAccessControl.PASSWORD
+    ) {
+      // Fire up the password input modal
+      setPasswordModalOpen(true);
+    } else {
+      handleWorkspaceJoinInner();
+    }
   };
 
   const renderLowerSection = () => {
@@ -118,11 +213,15 @@ const JoinWorkspace: FC<IJoinWorkspaceProps> = () => {
           return (
             <Box width={'60%'} display={'flex'} flexDirection={'column'}>
               <NewWorkspaceInfo
-                workspaceName={workspaceInfo.workspaceName}
-                workspaceType={workspaceInfo.workspaceType}
-                accessControl={workspaceInfo.accessControl}
-                permissions={workspaceInfo.permissions}
-                accessControlType={workspaceInfo.accessControlType}
+                workspaceName={workspaceInfo.name}
+                workspaceType={convertWorkspaceType(
+                  workspaceInfo.workspaceType
+                )}
+                accessControl={convertAccessControl(workspaceInfo)}
+                // permissions={workspaceInfo.permissions}
+                accessControlType={convertAccessControlType(
+                  workspaceInfo.securityType
+                )}
               />
               <Box mt={2}>
                 <ActionButton
@@ -215,6 +314,10 @@ const JoinWorkspace: FC<IJoinWorkspaceProps> = () => {
         workspaceInfo={workspaceInfo}
         open={confirmOpen}
         handleConfirm={handleConfirm}
+      />
+      <JoinWorkspacePasswordModal
+        open={passwordModalOpen}
+        handleConfirm={handlePasswordConfirm}
       />
     </Box>
   );

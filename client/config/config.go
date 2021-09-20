@@ -29,6 +29,16 @@ var (
 	DirectoryLibp2p  = "libp2p"
 	DirectoryStorage = "storage"
 	DirectoryBase    = "app_data"
+
+	// Client local //
+	DirectoryTemp  = "temp"
+	DirectoryShare = "share"
+)
+
+var (
+	WORKSPACE_TYPE_SEND_ONLY    = "send-only"
+	WORKSPACE_TYPE_RECEIVE_ONLY = "receive-only"
+	WORKSPACE_TYPE_SEND_RECEIVE = "send-receive"
 )
 
 // Default rendezvous nodes that are already up and running

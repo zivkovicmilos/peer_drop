@@ -13,7 +13,7 @@ const NewWorkspaceInfo: FC<INewWorkspaceInfoProps> = (props) => {
     workspaceName,
     workspaceType,
     accessControl,
-    permissions,
+    // permissions,
     accessControlType
   } = props;
 
@@ -32,29 +32,29 @@ const NewWorkspaceInfo: FC<INewWorkspaceInfoProps> = (props) => {
   const renderAdditionalSettings = () => {
     let additionalSettings = [];
 
-    if (permissions.additionalOwners.active) {
-      additionalSettings.push(
-        <Typography key={'additional-owners'} className={classes.reviewItem}>
-          {`Additional workspace owners - ${permissions.additionalOwners.contactIDs.length}`}
-        </Typography>
-      );
-    }
-
-    if (permissions.autocloseWorkspace.active) {
-      additionalSettings.push(
-        <Typography key={'autoclose'} className={classes.reviewItem}>
-          {`Auto-close workspace - ${permissions.autocloseWorkspace.date}`}
-        </Typography>
-      );
-    }
-
-    if (permissions.enforcePeerLimit.active) {
-      additionalSettings.push(
-        <Typography key={'peer-limit'} className={classes.reviewItem}>
-          {`Enforce peer limit - ${permissions.enforcePeerLimit.limit}`}
-        </Typography>
-      );
-    }
+    // if (permissions.additionalOwners.active) {
+    //   additionalSettings.push(
+    //     <Typography key={'additional-owners'} className={classes.reviewItem}>
+    //       {`Additional workspace owners - ${permissions.additionalOwners.contactIDs.length}`}
+    //     </Typography>
+    //   );
+    // }
+    //
+    // if (permissions.autocloseWorkspace.active) {
+    //   additionalSettings.push(
+    //     <Typography key={'autoclose'} className={classes.reviewItem}>
+    //       {`Auto-close workspace - ${permissions.autocloseWorkspace.date}`}
+    //     </Typography>
+    //   );
+    // }
+    //
+    // if (permissions.enforcePeerLimit.active) {
+    //   additionalSettings.push(
+    //     <Typography key={'peer-limit'} className={classes.reviewItem}>
+    //       {`Enforce peer limit - ${permissions.enforcePeerLimit.limit}`}
+    //     </Typography>
+    //   );
+    // }
 
     if (additionalSettings.length < 1) {
       additionalSettings.push(

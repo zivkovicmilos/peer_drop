@@ -1,7 +1,7 @@
-import { WorkspaceInfo } from '../../pages/JoinWorkspace/joinWorkspace.types';
+import { IWorkspaceInfoResponse } from '../../../services/workspaces/workspacesService.types';
 
 export interface IJoinWorkspaceModalProps {
-  workspaceInfo: WorkspaceInfo;
+  workspaceInfo: IWorkspaceInfoResponse;
   open: boolean;
 
   handleConfirm: (success: boolean) => void;

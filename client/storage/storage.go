@@ -35,6 +35,9 @@ var (
 
 	// RENDEZVOUS_NODES - Key which will hold an array of rendezvous nodes multiaddrs
 	RENDEZVOUS_NODES = []byte("rendezvousNodes")
+
+	// Credentials used for interacting with a specific workspace and its peers
+	WORKSPACE_CREDENTIALS = []byte("workspaceCredentials")
 )
 
 // Sub-prefixes
@@ -65,8 +68,15 @@ var (
 	WORKSPACE_INFO_SECURITY_TYPE        = []byte("securityType")
 	WORKSPACE_INFO_NAME                 = []byte("name")
 	WORKSPACE_INFO_PASSWORD_HASH        = []byte("passwordHash")
+	WORKSPACE_INFO_PASSWORD             = []byte("password")
 	WORKSPACE_INFO_CONTACT              = []byte("contact")
 	WORKSPACE_INFO_WORKSPACE_PUBLIC_KEY = []byte("publicKey")
+
+	// WORKSPACE CREDENTIALS //
+	WORKSPACE_CREDENTIALS_MNEMONIC    = []byte("mnemonic")
+	WORKSPACE_CREDENTIALS_PRIVATE_KEY = []byte("privateKey")
+	WORKSPACE_CREDENTIALS_PUBLIC_KEY  = []byte("publicKey")
+	WORKSPACE_CREDENTIALS_PASSWORD    = []byte("password")
 )
 
 // Indexes //
@@ -620,7 +630,9 @@ func (sh *StorageHandler) GetWorkspaceInfo(mnemonic string) (*proto.WorkspaceInf
 	workspaceContactPKMap := make(map[int]string)
 
 	keyBase := append(WORKSPACE_INFO, delimiter...)
-	iter := sh.db.NewIterator(util.BytesPrefix(append(keyBase, []byte(mnemonic)...)), nil)
+	iter := sh.db.NewIterator(
+		util.BytesPrefix(append(keyBase, []byte(mnemonic)...)), nil,
+	)
 	for iter.Next() {
 		if foundWorkspaceInfo == nil {
 			foundWorkspaceInfo = &proto.WorkspaceInfo{Mnemonic: mnemonic}
@@ -656,27 +668,72 @@ func (sh *StorageHandler) GetWorkspaceInfo(mnemonic string) (*proto.WorkspaceInf
 	iter.Release()
 	err := iter.Error()
 
-	// Add the owners to the object
-	foundWorkspaceInfo.WorkspaceOwnerPublicKeys = make([]string, 0)
-	for _, workspaceOwnerPK := range workspaceOwnerPKMap {
-		foundWorkspaceInfo.WorkspaceOwnerPublicKeys = append(foundWorkspaceInfo.WorkspaceOwnerPublicKeys, workspaceOwnerPK)
-	}
-
-	// Add the contacts if this is the correct security type
-	if foundWorkspaceInfo.SecurityType == "contacts" {
-		contacts := make([]string, 0)
-		for _, contactPK := range workspaceContactPKMap {
-			contacts = append(contacts, contactPK)
+	if foundWorkspaceInfo != nil {
+		// Add the owners to the object
+		foundWorkspaceInfo.WorkspaceOwnerPublicKeys = make([]string, 0)
+		for _, workspaceOwnerPK := range workspaceOwnerPKMap {
+			foundWorkspaceInfo.WorkspaceOwnerPublicKeys = append(foundWorkspaceInfo.WorkspaceOwnerPublicKeys, workspaceOwnerPK)
 		}
 
-		foundWorkspaceInfo.SecuritySettings = &proto.WorkspaceInfo_ContactsWrapper{
-			ContactsWrapper: &proto.ContactsWrapper{
-				ContactPublicKeys: contacts,
-			},
+		// Add the contacts if this is the correct security type
+		if foundWorkspaceInfo.SecurityType == "contacts" {
+			contacts := make([]string, 0)
+			for _, contactPK := range workspaceContactPKMap {
+				contacts = append(contacts, contactPK)
+			}
+
+			foundWorkspaceInfo.SecuritySettings = &proto.WorkspaceInfo_ContactsWrapper{
+				ContactsWrapper: &proto.ContactsWrapper{
+					ContactPublicKeys: contacts,
+				},
+			}
 		}
 	}
 
 	return foundWorkspaceInfo, err
+}
+
+// GetWorkspaces fetches all present workspaces
+func (sh *StorageHandler) GetWorkspaces(paginationLimits utils.PaginationLimits) ([]*proto.WorkspaceInfo, int, error) {
+	var foundWorkspaces []*proto.WorkspaceInfo
+
+	keyBase := append(WORKSPACE_INFO, delimiter...)
+	iter := sh.db.NewIterator(util.BytesPrefix(keyBase), nil)
+	var currentWorkspace *proto.WorkspaceInfo
+	for iter.Next() {
+		// tableName:id:attributeName => value
+		keyParts := strings.Split(string(iter.Key()), ":")
+
+		if currentWorkspace == nil || (currentWorkspace != nil && currentWorkspace.Mnemonic != keyParts[1]) {
+			foundWorkspace, findErr := sh.GetWorkspaceInfo(keyParts[1])
+			if findErr != nil {
+				return nil, 0, findErr
+			}
+
+			foundWorkspaces = append(foundWorkspaces, foundWorkspace)
+			currentWorkspace = foundWorkspace
+		}
+	}
+
+	iter.Release()
+	err := iter.Error()
+
+	totalWorkspaces := len(foundWorkspaces)
+
+	if paginationLimits != utils.NoPagination && totalWorkspaces != 0 {
+		offset := (paginationLimits.Page - 1) * paginationLimits.Limit
+
+		upperBound := offset + paginationLimits.Limit
+		if upperBound > totalWorkspaces {
+			upperBound = totalWorkspaces
+		}
+
+		foundWorkspaces = foundWorkspaces[offset:upperBound]
+	} else {
+		foundWorkspaces = []*proto.WorkspaceInfo{}
+	}
+
+	return foundWorkspaces, totalWorkspaces, err
 }
 
 // CreateWorkspaceInfo stores the workspace info into the rendezvous DB
@@ -836,4 +893,94 @@ func (sh *StorageHandler) SetRendezvousNodes(multiAddrs []string) error {
 	storageValue := []byte(concatenated)
 
 	return sh.db.Put(RENDEZVOUS_NODES, storageValue, nil)
+}
+
+// WORKSPACE CREDENTIALS //
+
+// CreateWorkspaceCredentials creates new workspace credentials
+func (sh *StorageHandler) CreateWorkspaceCredentials(
+	mnemonic string,
+	publicKey *string,
+	privateKey *string,
+	password *string,
+) error {
+	fieldPairs := make([]struct {
+		key   []byte
+		value []byte
+	}, 0)
+
+	if publicKey != nil {
+		fieldPairs = append(fieldPairs, struct {
+			key   []byte
+			value []byte
+		}{
+			key:   WORKSPACE_CREDENTIALS_PUBLIC_KEY,
+			value: []byte(*publicKey),
+		},
+		)
+	}
+
+	if privateKey != nil {
+		fieldPairs = append(fieldPairs, struct {
+			key   []byte
+			value []byte
+		}{
+			key:   WORKSPACE_CREDENTIALS_PRIVATE_KEY,
+			value: []byte(*privateKey),
+		},
+		)
+	}
+
+	if password != nil {
+		fieldPairs = append(fieldPairs, struct {
+			key   []byte
+			value []byte
+		}{
+			key:   WORKSPACE_CREDENTIALS_PASSWORD,
+			value: []byte(*password),
+		},
+		)
+	}
+
+	entityKeyBase := append(append(WORKSPACE_CREDENTIALS, delimiter...), append([]byte(mnemonic), delimiter...)...)
+	for _, field := range fieldPairs {
+		putError := sh.db.Put(append(entityKeyBase, field.key...), field.value, nil)
+		if putError != nil {
+			return putError
+		}
+	}
+
+	return nil
+}
+
+// GetWorkspaceCredentials fetches a workspace credentials based on the mnemonic
+func (sh *StorageHandler) GetWorkspaceCredentials(mnemonic string) (*types.WorkspaceCredentials, error) {
+	var foundCredentials *types.WorkspaceCredentials
+	foundCredentials = nil
+
+	keyBase := append(WORKSPACE_CREDENTIALS, delimiter...)
+	iter := sh.db.NewIterator(util.BytesPrefix(append(keyBase, []byte(mnemonic)...)), nil)
+	for iter.Next() {
+		if foundCredentials == nil {
+			foundCredentials = &types.WorkspaceCredentials{Mnemonic: mnemonic}
+		}
+		// workspaceCredentials:mnemonic:attributeName => value
+		keyParts := strings.Split(string(iter.Key()), ":")
+		attributeName := keyParts[len(keyParts)-1]
+
+		value := string(iter.Value())
+		switch attributeName {
+		case "publicKey":
+			foundCredentials.PublicKey = &value
+		case "privateKey":
+			foundCredentials.PrivateKey = &value
+		case "password":
+			foundCredentials.Password = &value
+		}
+	}
+
+	iter.Release()
+	err := iter.Error()
+
+	return foundCredentials, err
 }
