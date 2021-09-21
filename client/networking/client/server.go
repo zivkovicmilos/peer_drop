@@ -37,9 +37,8 @@ import (
 )
 
 type ClientServer struct {
-	logger       hclog.Logger
-	nodeConfig   *config.NodeConfig
-	closeChannel chan struct{}
+	logger     hclog.Logger
+	nodeConfig *config.NodeConfig
 
 	// Networking metadata //
 	me                  peer.ID              // the current node's peer ID
@@ -55,6 +54,7 @@ type ClientServer struct {
 	//workspaceDirectoryMap map[string]string               // In memory map of workspace directories on disk (mnemonic -> dirName)
 	pubsubSubscriptionsStop map[string]chan struct{} // Stop channel map
 	pubsubTopicsStop        map[string]chan struct{} // Stop channel map
+	findPeersStop           map[string]chan struct{} // Stop channel map
 
 	// File handling //
 	fileListerMap     map[string]*files.FileLister     // In memory map of file lister services (mnemonic -> fileLister)
@@ -102,6 +102,7 @@ func NewClientServer(
 
 		pubsubSubscriptionsStop: make(map[string]chan struct{}),
 		pubsubTopicsStop:        make(map[string]chan struct{}),
+		findPeersStop:           make(map[string]chan struct{}),
 	}
 }
 
@@ -214,6 +215,8 @@ func (cs *ClientServer) Start(closeChannel chan struct{}) {
 	}
 
 	<-closeChannel
+
+	return
 }
 
 // Stop closes the client server and all pending services
@@ -225,8 +228,10 @@ func (cs *ClientServer) Stop() {
 	// Close the libp2p host
 	_ = cs.host.Close()
 
-	// Send the close signal to the channel (findPeers)
-	cs.closeChannel <- struct{}{}
+	// Stop all find peers loops
+	for _, findPeerLoop := range cs.findPeersStop {
+		findPeerLoop <- struct{}{}
+	}
 
 	// Stop the topic subscribers
 	for _, subscription := range cs.pubsubSubscriptionsStop {
@@ -307,6 +312,8 @@ func (cs *ClientServer) startPeerDropService() error {
 			}
 		}(workspaceInfo)
 	}
+
+	cs.logger.Info("peer_drop service started")
 
 	return nil
 }
@@ -780,9 +787,12 @@ func (cs *ClientServer) findPeers(workspaceMnemonic string, info *handshakeInfo)
 	discovery.Advertise(findPeersCtx, routingDiscovery, workspaceMnemonic)
 	cs.logger.Info(fmt.Sprintf("Successfully announced workspace file request [%s]", workspaceMnemonic))
 
+	closeChannel := make(chan struct{})
+	cs.findPeersStop[workspaceMnemonic] = closeChannel
+
 	for {
 		select {
-		case <-cs.closeChannel:
+		case <-closeChannel:
 			ticker.Stop()
 			cancelFunc()
 			return
