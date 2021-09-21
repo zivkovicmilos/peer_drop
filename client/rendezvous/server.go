@@ -36,6 +36,7 @@ type RendezvousServer struct {
 	logger           hclog.Logger
 	nodeConfig       *config.NodeConfig
 	rendezvousConfig *config.RendezvousConfig
+	closeChannel     chan struct{}
 
 	// Networking metadata //
 	me   peer.ID
@@ -68,6 +69,7 @@ func NewRendezvousServer(
 		nodeConfig:            nodeConfig,
 		rendezvousConfig:      rendezvousConfig,
 		workspaceInfoMsgQueue: make(chan *proto.WorkspaceInfo),
+		closeChannel:          make(chan struct{}),
 	}
 }
 
@@ -149,6 +151,9 @@ func (r *RendezvousServer) Start(closeChannel chan struct{}) {
 
 	// Wait for a close signal
 	<-closeChannel
+
+	// Alert the running routines to stop
+	r.closeChannel <- struct{}{}
 }
 
 func (r *RendezvousServer) statusDummy() {
@@ -228,9 +233,14 @@ func (r *RendezvousServer) setupPubsub() error {
 func (r *RendezvousServer) readPubsubLoop() {
 	go r.storageUpdateListener()
 
-	// TODO add better closing management with channels
-
 	for {
+		select {
+		case _ = <-r.closeChannel:
+			close(r.workspaceInfoMsgQueue)
+			return
+		default:
+		}
+
 		workspaceInfoMsg, err := r.pubSubSubscription.Next(r.ctx)
 		if err != nil {
 			r.logger.Error(fmt.Sprintf("Unable to parse message, %v", err))
@@ -309,7 +319,7 @@ func (r *RendezvousServer) GetWorkspaceInfo(
 ) (*proto.WorkspaceInfo, error) {
 	foundWorkspaceInfo, findErr := storage.GetStorageHandler().GetWorkspaceInfo(request.Mnemonic)
 	if findErr != nil {
-		return nil, fmt.Errorf("err") // TODO conform grpc
+		return nil, fmt.Errorf("unable to fetch workspace info, %v", findErr)
 	}
 
 	return foundWorkspaceInfo, nil
@@ -331,7 +341,7 @@ func (r *RendezvousServer) CreateNewWorkspace(
 	}
 
 	workspaceInfo.Mnemonic = generatedMnemonic
-	r.handleNewWorkspace(workspaceInfo) // TODO make this a go routine?
+	go r.handleNewWorkspace(workspaceInfo)
 
 	return workspaceInfo, nil
 }

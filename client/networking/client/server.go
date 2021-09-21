@@ -42,17 +42,19 @@ type ClientServer struct {
 	closeChannel chan struct{}
 
 	// Networking metadata //
-	me                    peer.ID              // the current node's peer ID
-	host                  host.Host            // the reference to the libp2p host
-	rendezvousIDs         []peer.ID            // the peer IDs of the rendezvous nodes
-	verifiedPeers         map[string][]peer.ID // the peer IDs of nodes who've passed verification for the given mnemonic
-	pendingPeers          sync.Map             // peers awaiting verification. Only a single verification request is processed per user
-	pendingPeersSize      int64
-	kademliaDHT           *dht.IpfsDHT
-	pubSub                *pubsub.PubSub                  // Reference to the pubsub service
-	pubsubSubscriptions   map[string]*pubsub.Subscription // In memory map of active subscriptions
-	pubsubTopics          map[string]*pubsub.Topic        // In memory map of active topics
-	workspaceDirectoryMap map[string]string               // In memory map of workspace directories on disk (mnemonic -> dirName)
+	me                  peer.ID              // the current node's peer ID
+	host                host.Host            // the reference to the libp2p host
+	rendezvousIDs       []peer.ID            // the peer IDs of the rendezvous nodes
+	verifiedPeers       map[string][]peer.ID // the peer IDs of nodes who've passed verification for the given mnemonic
+	pendingPeers        sync.Map             // peers awaiting verification. Only a single verification request is processed per user
+	pendingPeersSize    int64
+	kademliaDHT         *dht.IpfsDHT
+	pubSub              *pubsub.PubSub                  // Reference to the pubsub service
+	pubsubSubscriptions map[string]*pubsub.Subscription // In memory map of active subscriptions
+	pubsubTopics        map[string]*pubsub.Topic        // In memory map of active topics
+	//workspaceDirectoryMap map[string]string               // In memory map of workspace directories on disk (mnemonic -> dirName)
+	pubsubSubscriptionsStop map[string]chan struct{} // Stop channel map
+	pubsubTopicsStop        map[string]chan struct{} // Stop channel map
 
 	// File handling //
 	fileListerMap     map[string]*files.FileLister     // In memory map of file lister services (mnemonic -> fileLister)
@@ -97,13 +99,18 @@ func NewClientServer(
 		fileListerMuxMap:     make(map[string]sync.RWMutex),
 		verifiedPeersMuxMap:  make(map[string]sync.RWMutex),
 		fileAggregatorMuxMap: make(map[string]sync.RWMutex),
+
+		pubsubSubscriptionsStop: make(map[string]chan struct{}),
+		pubsubTopicsStop:        make(map[string]chan struct{}),
 	}
 }
 
+// numPendingPeers returns the number of peers pending handshake
 func (cs *ClientServer) numPendingPeers() int64 {
 	return atomic.LoadInt64(&cs.pendingPeersSize)
 }
 
+// isPendingPeer checks if the peer is awaiting handshake
 func (cs *ClientServer) isPendingPeer(peerID peer.ID) bool {
 	isPending, ok := cs.pendingPeers.Load(peerID)
 	if !ok {
@@ -112,12 +119,14 @@ func (cs *ClientServer) isPendingPeer(peerID peer.ID) bool {
 	return isPending.(bool)
 }
 
+// removePendingPeer unsets the peer as pending handshake
 func (cs *ClientServer) removePendingPeer(peerID peer.ID) {
 	if _, loaded := cs.pendingPeers.LoadAndDelete(peerID); loaded {
 		atomic.AddInt64(&cs.pendingPeersSize, -1)
 	}
 }
 
+// setPendingPeer sets the peer as pending handshake
 func (cs *ClientServer) setPendingPeer(peerID peer.ID) {
 	if _, loaded := cs.pendingPeers.LoadOrStore(peerID, true); !loaded {
 		atomic.AddInt64(&cs.pendingPeersSize, 1)
@@ -168,10 +177,7 @@ func (cs *ClientServer) Start(closeChannel chan struct{}) {
 		os.Exit(1)
 	}
 
-	defer func() {
-		cs.cancelFunc()
-		_ = clientHost.Close()
-	}()
+	defer cs.Stop()
 
 	cs.host = clientHost
 
@@ -198,27 +204,80 @@ func (cs *ClientServer) Start(closeChannel chan struct{}) {
 	// Dial the rendezvous nodes
 	cs.dialRendezvous()
 
+	// Start the workspace handler loop
+	go cs.workspaceJoinHandler()
+
+	if startErr := cs.startPeerDropService(); startErr != nil {
+		cs.logger.Error(fmt.Sprintf("Unable to start peer_drop service, %v", startErr))
+
+		os.Exit(1)
+	}
+
 	<-closeChannel
 }
 
-// workspaceHandler handles incoming workspace join messages and starts the
+// Stop closes the client server and all pending services
+func (cs *ClientServer) Stop() {
+	cs.logger.Info("Closing client server...")
+	// Cancel the context
+	cs.cancelFunc()
+
+	// Close the libp2p host
+	_ = cs.host.Close()
+
+	// Send the close signal to the channel (findPeers)
+	cs.closeChannel <- struct{}{}
+
+	// Stop the topic subscribers
+	for _, subscription := range cs.pubsubSubscriptionsStop {
+		subscription <- struct{}{}
+	}
+
+	// Stop the topic publishers
+	for _, topic := range cs.pubsubTopicsStop {
+		topic <- struct{}{}
+	}
+
+	// Stop the file listers
+	for _, fileLister := range cs.fileListerMap {
+		fileLister.Stop()
+	}
+
+	// Stop the file aggregators
+	for _, fileAggregator := range cs.fileAggregatorMap {
+		fileAggregator.Stop()
+	}
+
+	// Close the workspace handler loop
+	close(cs.newWorkspaceChannel)
+
+	cs.logger.Info("Client server closed")
+}
+
+// workspaceJoinHandler handles incoming workspace join messages and starts the
 // appropriate loops
-func (cs *ClientServer) workspaceHandler() {
+func (cs *ClientServer) workspaceJoinHandler() {
 	for {
+		select {
 		// Wait for workspace join messages
-		workspaceInfo := <-cs.newWorkspaceChannel
+		case workspaceInfo, more := <-cs.newWorkspaceChannel:
+			if more {
+				// Initialize the workspace
+				go func() {
+					err := cs.initializeWorkspace(workspaceInfo)
+					if err != nil {
+						cs.logger.Error(fmt.Sprintf("Unable to initialize workspace, %v", err))
 
-		// Initialize the workspace
-		go func() {
-			err := cs.initializeWorkspace(workspaceInfo)
-			if err != nil {
-				cs.logger.Error(fmt.Sprintf("Unable to initialize workspace, %v", err))
+						return
+					}
 
+					cs.logger.Info(fmt.Sprintf("Successfully initialized workspace %s", workspaceInfo.Name))
+				}()
+			} else {
+				cs.logger.Info("Closing workspace join handler...")
 				return
 			}
-
-			cs.logger.Info(fmt.Sprintf("Successfully initialized workspace %s", workspaceInfo.Name))
-		}()
+		}
 	}
 }
 
@@ -275,12 +334,12 @@ func (cs *ClientServer) initializeWorkspace(workspaceInfo *proto.WorkspaceInfo) 
 
 	pubSubTopic, err := cs.pubSub.Join(workspaceInfo.Mnemonic)
 	if err != nil {
-		return fmt.Errorf("unable to join topic, %v", err)
+		return fmt.Errorf("unable to join topic [%s], %v", workspaceInfo.Mnemonic, err)
 	}
 
 	pubSubSubscription, err := pubSubTopic.Subscribe()
 	if err != nil {
-		return fmt.Errorf("unable to subscribe to topic, %v", err)
+		return fmt.Errorf("unable to subscribe to topic [%s], %v", workspaceInfo.Mnemonic, err)
 	}
 
 	// Update the in memory map values
@@ -313,6 +372,8 @@ func (cs *ClientServer) initializeWorkspace(workspaceInfo *proto.WorkspaceInfo) 
 		go cs.startTopicPublisher(mnemonic)
 	}
 
+	cs.logger.Info(fmt.Sprintf("Workspace with mnemonic [%s] initialized", mnemonic))
+
 	return nil
 }
 
@@ -322,28 +383,29 @@ func (cs *ClientServer) initializeWorkspaceDirectory(name string, mnemonic strin
 	dirName := strings.ToLower(name)
 	dirName = strings.Replace(dirName, " ", "-", -1)
 
-	// baseDir/workspaceName/temp
+	pathCommon := fmt.Sprintf("%s/%s/%s", cs.nodeConfig.BaseDir, config.DirectoryFiles, dirName)
+
+	// baseDir/files/workspace-mnemonic/temp
 	// Directory is used for temporary download data
-	if createErr := globalUtils.CreateDirectory(
-		fmt.Sprintf("%s/%s/%s", cs.nodeConfig.BaseDir, dirName, config.DirectoryTemp),
-	); createErr != nil {
+	filesDirectory := fmt.Sprintf("%s/%s", pathCommon, config.DirectoryTemp)
+	if createErr := globalUtils.CreateDirectory(filesDirectory); createErr != nil {
 		return createErr
 	}
 
-	// baseDir/workspaceName/share
-	// Directory is used for sharing node local files
-	shareDirectory := fmt.Sprintf("%s/%s/%s", cs.nodeConfig.BaseDir, dirName, config.DirectoryShare)
-	if createErr := globalUtils.CreateDirectory(
-		shareDirectory,
-	); createErr != nil {
+	// baseDir/files/workspace-mnemonic/share
+	// Directory is used for sharing local node files
+	shareDirectory := fmt.Sprintf("%s/%s", pathCommon, config.DirectoryShare)
+	if createErr := globalUtils.CreateDirectory(shareDirectory); createErr != nil {
 		return createErr
 	}
 
+	// Start the file lister service for this directory
 	fileLister := files.NewFileLister(
 		cs.logger,
 		shareDirectory,
 		time.Second*5,
 	)
+	fileLister.Start()
 
 	cs.registerFileLister(mnemonic, fileLister)
 
@@ -367,6 +429,8 @@ func (cs *ClientServer) unregisterFileLister(mnemonic string) {
 	mux.Lock()
 	defer mux.Unlock()
 
+	fileLister := cs.fileListerMap[mnemonic]
+	fileLister.Stop()
 	delete(cs.fileListerMap, mnemonic)
 }
 
@@ -379,6 +443,10 @@ func (cs *ClientServer) findPeersWrapper(workspaceInfo *proto.WorkspaceInfo) err
 	workspaceCredentials, getErr := storage.GetStorageHandler().GetWorkspaceCredentials(workspaceInfo.Mnemonic)
 	if getErr != nil {
 		return getErr
+	}
+
+	if workspaceCredentials == nil {
+		return errors.New("no workspace credentials found")
 	}
 
 	info.publicKey = workspaceCredentials.PublicKey
@@ -406,6 +474,10 @@ func (cs *ClientServer) startSubscriptionListener(mnemonic string) {
 	subscription := cs.pubsubSubscriptions[mnemonic]
 	subContext := context.Background()
 
+	// Create the stop channel
+	stopChannel := make(chan struct{})
+	cs.pubsubSubscriptionsStop[mnemonic] = stopChannel
+
 	// Create the file aggregator instance
 	updateChannel := make(chan files.FileListWrapper)
 	fileAggregator := files.NewFileAggregator(cs.logger, mnemonic, updateChannel)
@@ -418,12 +490,18 @@ func (cs *ClientServer) startSubscriptionListener(mnemonic string) {
 	fileAggregator.Start()
 
 	for {
+		select {
+		case _ = <-stopChannel:
+			cs.logger.Info(fmt.Sprintf("Stopping subscription listener for mnemonic [%s]", mnemonic))
+			return
+		default:
+		}
 		fileListMessage, err := subscription.Next(subContext)
 		if err != nil {
 			cs.logger.Error(fmt.Sprintf("Unable to parse message, %v", err))
 			return
 		}
-		cs.logger.Info("Received a new pubsub message for mnemonic ", mnemonic)
+		cs.logger.Info("Received a new file list message for mnemonic ", mnemonic)
 
 		// Forward messages that are not from us
 		if fileListMessage.ReceivedFrom == cs.me {
@@ -451,14 +529,28 @@ func (cs *ClientServer) startTopicPublisher(mnemonic string) {
 	topicContext := context.Background()
 	ticker := time.NewTicker(time.Second * 5)
 
+	// Create the stop channel
+	stopChannel := make(chan struct{})
+	cs.pubsubTopicsStop[mnemonic] = stopChannel
+
+	mux, _ := cs.fileAggregatorMuxMap[mnemonic]
+	mux.RLock()
+	fileAggregator := cs.fileAggregatorMap[mnemonic]
+	mux.RUnlock()
+
 	for {
 		select {
-		case _ = <-ticker.C:
-			// Every 5 seconds, share the file list
+		case _ = <-stopChannel:
+			ticker.Stop()
+			cs.logger.Info(fmt.Sprintf("Stopping topic publisher for mnemonic [%s]", mnemonic))
+			return
 
+		// Every 5 seconds, share the file list
+		case _ = <-ticker.C:
 			// Compile file list
-			// TODO
-			var fileList *proto.FileList
+			fileList := &proto.FileList{
+				FileList: fileAggregator.GetFileList(),
+			}
 
 			// Share the file list to the topic
 			marshaler := jsonpb.Marshaler{}
@@ -480,7 +572,8 @@ func (cs *ClientServer) startTopicPublisher(mnemonic string) {
 	}
 }
 
-// amIWorkspaceOwner
+// amIWorkspaceOwner checks if the current node has any keys which correspond
+// to the given workspace owner key list
 func (cs *ClientServer) amIWorkspaceOwner(info *proto.WorkspaceInfo) bool {
 	// Range over the public keys of the workspace owners and check
 	// if the current node is the owner of one of these keys
@@ -538,6 +631,7 @@ func (cs *ClientServer) dialRendezvous() {
 				cs.logger.Error(fmt.Sprintf("Unable to connect to rendezvous node (%s), %v", *peerinfo, err))
 			} else {
 				cs.logger.Info(fmt.Sprintf("Successfully connected to rendezvous node %s", *peerinfo))
+
 				cs.rendezvousMux.Lock()
 				cs.rendezvousIDs = append(cs.rendezvousIDs, peerinfo.ID)
 				cs.rendezvousMux.Unlock()
@@ -1021,6 +1115,7 @@ func (cs *ClientServer) addVerifiedPeer(mnemonic string, newPeer peer.ID) {
 	cs.verifiedPeers[mnemonic] = verifiedPeers
 }
 
+// removeVerifiedPeer removes a peer from the verified array
 func (cs *ClientServer) removeVerifiedPeer(mnemonic string, oldPeer peer.ID) {
 	mux, _ := cs.verifiedPeersMuxMap[mnemonic]
 	mux.Lock()
@@ -1057,15 +1152,8 @@ func (cs *ClientServer) JoinWorkspacePassword(
 	passwordHash = localCrypto.NewSHA256(passwordHash)
 
 	workspacePasswordHash := workspaceInfo.SecuritySettings.(*proto.WorkspaceInfo_PasswordHash).PasswordHash
-	if workspacePasswordHash == password {
-		// Passwords match
-		// Alert the workspace manager of a new workspace
-		cs.newWorkspaceChannel <- workspaceInfo
 
-		return true
-	}
-
-	return false
+	return workspacePasswordHash == password
 }
 
 // JoinWorkspacePublicKey handles workspace join requests with public keys
@@ -1084,10 +1172,11 @@ func (cs *ClientServer) JoinWorkspacePublicKey(
 		}
 	}
 
-	if inSet {
-		// Alert the workspace manager of a new workspace
-		cs.newWorkspaceChannel <- workspaceInfo
-	}
-
 	return inSet
+}
+
+// JoinWorkspaceConfirm alerts the workspace handler that a new workspace
+// has been joined
+func (cs *ClientServer) JoinWorkspaceConfirm(workspaceInfo *proto.WorkspaceInfo) {
+	cs.newWorkspaceChannel <- workspaceInfo
 }

@@ -26,9 +26,10 @@ type FileLister struct {
 	fileMap    map[string]*proto.File // checksum -> file
 	fileMapMux sync.RWMutex
 
-	sweepInterval time.Duration
-
+	sweepInterval   time.Duration
 	sweepInProgress atomic.Bool
+
+	stopChannel chan struct{}
 }
 
 // NewFileLister creates a new instance of the file lister
@@ -42,6 +43,7 @@ func NewFileLister(
 		baseDir:       baseDir,
 		fileMap:       make(map[string]*proto.File),
 		sweepInterval: sweepInterval,
+		stopChannel:   make(chan struct{}),
 	}
 }
 
@@ -58,10 +60,15 @@ func (fl *FileLister) sweepDirectory() {
 		return
 	}
 	fl.sweepInProgress.Store(true)
+	fl.logger.Info("Directory sweep started")
+	var filesFound atomic.Int64
 
 	var wg sync.WaitGroup
 
-	defer fl.sweepInProgress.Store(false)
+	defer func() {
+		fl.logger.Info(fmt.Sprintf("Directory sweep finished with %d files", filesFound.Load()))
+		fl.sweepInProgress.Store(false)
+	}()
 
 	// Sweep directory for files
 	directoryFiles, err := ioutil.ReadDir("./")
@@ -88,6 +95,7 @@ func (fl *FileLister) sweepDirectory() {
 				protoFile.FileChecksum = checksum
 
 				go fl.addFile(protoFile, checksum)
+				filesFound.Inc()
 			}()
 		}
 	}
@@ -110,15 +118,25 @@ func fileInfoToFileProto(file fs.FileInfo) *proto.File {
 	return protoFile
 }
 
+// Stop stops the file lister service
+func (fl *FileLister) Stop() {
+	fl.stopChannel <- struct{}{}
+}
+
 // sweepDirectoryLoop is triggered periodically to update the file map
 func (fl *FileLister) sweepDirectoryLoop() {
-	//sweepContext := context.Background()
-	ticker := time.NewTicker(fl.sweepInterval)
+	// Do an initial sweep
+	fl.sweepDirectory()
 
+	// Start the loop
+	ticker := time.NewTicker(fl.sweepInterval)
 	for {
 		select {
 		case _ = <-ticker.C:
 			go fl.sweepDirectory()
+		case _ = <-fl.stopChannel:
+			ticker.Stop()
+			return
 		}
 	}
 }
@@ -136,6 +154,8 @@ func (fl *FileLister) checksumFile(path string) (string, error) {
 	if _, err = io.Copy(h, f); err != nil {
 		return "", err
 	}
+
+	fl.logger.Info(fmt.Sprintf("Checksum complete for file at path %s", path))
 
 	return fmt.Sprintf("%x", h.Sum(nil)), nil
 }

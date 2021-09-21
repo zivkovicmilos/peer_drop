@@ -193,14 +193,16 @@ func JoinWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if confirmed {
+		// Alert the client server listeners of joining
+		clientServer.JoinWorkspaceConfirm(workspaceInfo)
+
 		if encodeErr := json.NewEncoder(w).Encode("Workspace joined!"); encodeErr != nil {
 			http.Error(w, "Unable to encode response", http.StatusInternalServerError)
 			return
 		}
-
-		return
+	} else {
+		http.Error(w, "Unable to join workspace", http.StatusBadRequest)
 	}
 
-	http.Error(w, "Unable to join workspace", http.StatusBadRequest)
 	return
 }

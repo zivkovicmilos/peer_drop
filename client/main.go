@@ -86,6 +86,7 @@ func main() {
 		servicehandler.GetServiceHandler().RegisterCloseListener("storageHandler"),
 	)
 
+	// Open DB
 	if storageErr := storage.GetStorageHandler().OpenDB(
 		fmt.Sprintf("%s/%s/", *baseDirPtr, config.DirectoryStorage),
 	); storageErr != nil {
@@ -101,7 +102,7 @@ func main() {
 	// Start the broadcast notifier
 	go servicehandler.GetServiceHandler().BroadcastNotifier()
 
-	// ===== CLIENT SPECIFIC SETUP ===== //
+	// ===== CLIENT / RENDEZVOUS SPECIFIC SETUP ===== //
 
 	// Start up the appropriate client instance
 	nodeConfig := &config.NodeConfig{
@@ -113,9 +114,12 @@ func main() {
 	}
 
 	if *rendezvousMode {
-		setupAsRendezvous(logger, nodeConfig, &config.RendezvousConfig{
-			RendezvousNodes: rendezvousNodes,
-		},
+		setupAsRendezvous(
+			logger,
+			nodeConfig,
+			&config.RendezvousConfig{
+				RendezvousNodes: rendezvousNodes,
+			},
 		)
 	} else {
 		setupAsClient(logger, nodeConfig)
