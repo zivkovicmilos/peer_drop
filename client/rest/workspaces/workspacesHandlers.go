@@ -73,6 +73,9 @@ func CreateWorkspace(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Initialize the workspace locally
+	clientServer.TriggerWorkspaceInit(workspaceInfo)
+
 	if encodeErr := json.NewEncoder(w).Encode(&types.NewWorkspaceResponse{Mnemonic: workspaceInfo.Mnemonic}); encodeErr != nil {
 		http.Error(w, "Unable to encode response", http.StatusInternalServerError)
 		return
@@ -194,7 +197,7 @@ func JoinWorkspace(w http.ResponseWriter, r *http.Request) {
 
 	if confirmed {
 		// Alert the client server listeners of joining
-		clientServer.JoinWorkspaceConfirm(workspaceInfo)
+		clientServer.TriggerWorkspaceInit(workspaceInfo)
 
 		if encodeErr := json.NewEncoder(w).Encode("Workspace joined!"); encodeErr != nil {
 			http.Error(w, "Unable to encode response", http.StatusInternalServerError)

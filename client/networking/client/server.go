@@ -1185,8 +1185,8 @@ func (cs *ClientServer) JoinWorkspacePublicKey(
 	return inSet
 }
 
-// JoinWorkspaceConfirm alerts the workspace handler that a new workspace
+// TriggerWorkspaceInit alerts the workspace handler that a new workspace
 // has been joined
-func (cs *ClientServer) JoinWorkspaceConfirm(workspaceInfo *proto.WorkspaceInfo) {
+func (cs *ClientServer) TriggerWorkspaceInit(workspaceInfo *proto.WorkspaceInfo) {
 	cs.newWorkspaceChannel <- workspaceInfo
 }
