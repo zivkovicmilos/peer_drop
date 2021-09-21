@@ -31,11 +31,19 @@ const NewWorkspaceReview: FC<INewWorkspaceReviewProps> = () => {
 
   const { userIdentity } = useContext(SessionContext);
 
+  const convertAccessControlType = (type: ENWAccessControl) => {
+    if (type == ENWAccessControl.PASSWORD) {
+      return "password"
+    } else {
+      return "contacts"
+    }
+  }
+
   const constructNewWorkspaceRequest = (): INewWorkspaceRequest => {
     let workspaceRequest: INewWorkspaceRequest = {
       workspaceName,
       workspaceType,
-      workspaceAccessControlType: accessControlType,
+      workspaceAccessControlType: convertAccessControlType(accessControlType),
       workspaceAccessControl: {},
       baseWorkspaceOwnerKeyID: userIdentity.publicKeyID,
       workspaceAdditionalOwnerPublicKeys: []

@@ -16,7 +16,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/protocol"
-	"github.com/libp2p/go-libp2p-kad-dht"
+	dht "github.com/libp2p/go-libp2p-kad-dht"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/zivkovicmilos/peer_drop/config"
@@ -33,11 +33,10 @@ var (
 )
 
 type RendezvousServer struct {
-	logger            hclog.Logger
-	nodeConfig        *config.NodeConfig
-	rendezvousConfig  *config.RendezvousConfig
-	closeChannel      chan struct{}
-	pubSubStopChannel chan struct{}
+	logger           hclog.Logger
+	nodeConfig       *config.NodeConfig
+	rendezvousConfig *config.RendezvousConfig
+	closeChannel     chan struct{}
 
 	// Networking metadata //
 	me   peer.ID
@@ -151,10 +150,10 @@ func (r *RendezvousServer) Start(closeChannel chan struct{}) {
 
 	// Wait for a close signal
 	<-closeChannel
-
 	// Alert the running routines to stop
 	r.closeChannel <- struct{}{}
-	r.pubSubStopChannel <- struct{}{}
+
+	return
 }
 
 func (r *RendezvousServer) statusDummy() {
@@ -234,22 +233,20 @@ func (r *RendezvousServer) setupPubsub() error {
 func (r *RendezvousServer) readPubsubLoop() {
 	go r.storageUpdateListener()
 
-	pubSubStopChannel := make(chan struct{})
-	r.pubSubStopChannel = pubSubStopChannel
+	pubsubContext, cancelFunc := context.WithCancel(context.Background())
+
+	go func() {
+		<-r.closeChannel
+		cancelFunc()
+		close(r.workspaceInfoMsgQueue)
+	}()
+
+	defer cancelFunc()
 
 	for {
-		select {
-		case _ = <-r.pubSubStopChannel:
-			close(r.workspaceInfoMsgQueue)
-			return
-		default:
-		}
-
-		workspaceInfoMsg, err := r.pubSubSubscription.Next(r.ctx)
+		workspaceInfoMsg, err := r.pubSubSubscription.Next(pubsubContext)
 		if err != nil {
 			r.logger.Error(fmt.Sprintf("Unable to parse message, %v", err))
-
-			close(r.workspaceInfoMsgQueue)
 			return
 		}
 		r.logger.Info("Received a new pubsub message")
@@ -345,7 +342,7 @@ func (r *RendezvousServer) CreateNewWorkspace(
 	}
 
 	workspaceInfo.Mnemonic = generatedMnemonic
-	go r.handleNewWorkspace(workspaceInfo)
+	r.handleNewWorkspace(workspaceInfo)
 
 	return workspaceInfo, nil
 }
@@ -356,6 +353,7 @@ func (r *RendezvousServer) handleNewWorkspace(workspaceInfo *proto.WorkspaceInfo
 	storeErr := storage.GetStorageHandler().CreateWorkspaceInfo(workspaceInfo)
 	if storeErr != nil {
 		r.logger.Error(fmt.Sprintf("Unable to store workspace info, %v", storeErr))
+		return
 	}
 
 	marshaler := jsonpb.Marshaler{}
@@ -363,6 +361,7 @@ func (r *RendezvousServer) handleNewWorkspace(workspaceInfo *proto.WorkspaceInfo
 	err := marshaler.Marshal(buf, workspaceInfo)
 	if err != nil {
 		r.logger.Error(fmt.Sprintf("Unable to marshal workspace info, %v", err))
+		return
 	}
 
 	sendErr := r.pubSubTopic.Publish(r.ctx, buf.Bytes())

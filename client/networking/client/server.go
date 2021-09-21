@@ -464,20 +464,20 @@ func (cs *ClientServer) unregisterFileLister(mnemonic string) {
 // for a specific workspace
 func (cs *ClientServer) findPeersWrapper(workspaceInfo *proto.WorkspaceInfo) error {
 	// Contains necessary information to perform new peer handshakes
-	info := &handshakeInfo{}
+	info := &workspaceCredentials{}
 
-	workspaceCredentials, getErr := storage.GetStorageHandler().GetWorkspaceCredentials(workspaceInfo.Mnemonic)
+	workspaceCred, getErr := storage.GetStorageHandler().GetWorkspaceCredentials(workspaceInfo.Mnemonic)
 	if getErr != nil {
 		return getErr
 	}
 
-	if workspaceCredentials == nil {
+	if workspaceCred == nil {
 		return errors.New("no workspace credentials found")
 	}
 
-	info.publicKey = workspaceCredentials.PublicKey
-	info.privateKey = workspaceCredentials.PrivateKey
-	info.password = workspaceCredentials.Password
+	info.publicKey = workspaceCred.PublicKey
+	info.privateKey = workspaceCred.PrivateKey
+	info.password = workspaceCred.Password
 
 	go cs.findPeers(workspaceInfo.Mnemonic, info)
 
@@ -805,7 +805,7 @@ func (cs *ClientServer) workspaceRequestToWorkspaceInfo(
 
 // findPeers is a loop function that gathers new peers for the
 // specific workspace mnemonic
-func (cs *ClientServer) findPeers(workspaceMnemonic string, info *handshakeInfo) {
+func (cs *ClientServer) findPeers(workspaceMnemonic string, workspaceCredentials *workspaceCredentials) {
 	findPeersCtx, cancelFunc := context.WithCancel(context.Background())
 
 	ticker := time.NewTicker(10 * time.Second)
@@ -843,7 +843,6 @@ func (cs *ClientServer) findPeers(workspaceMnemonic string, info *handshakeInfo)
 			}
 
 			// Attempt to verify these peers
-			// TODO make sure this is not infinite
 			cs.logger.Debug(fmt.Sprintf("Number of peers found %d", len(peerChan)))
 			for foundPeer := range peerChan {
 				if foundPeer.ID.String() == cs.me.String() {
@@ -877,7 +876,7 @@ func (cs *ClientServer) findPeers(workspaceMnemonic string, info *handshakeInfo)
 						}
 					}()
 
-					if handshakeErr := cs.handleHandshake(peerID, workspaceMnemonic, info); handshakeErr != nil {
+					if handshakeErr := cs.handleHandshake(peerID, workspaceMnemonic, workspaceCredentials); handshakeErr != nil {
 						cs.logger.Error(fmt.Sprintf("Unable to perform handshake, %v", handshakeErr))
 						cs.disconnectFromPeer(peerID)
 					} else {
@@ -890,7 +889,7 @@ func (cs *ClientServer) findPeers(workspaceMnemonic string, info *handshakeInfo)
 	}
 }
 
-type handshakeInfo struct {
+type workspaceCredentials struct {
 	publicKey  *string // PEM encoded
 	privateKey *string // PEM encoded
 	password   *string // password from DB
@@ -935,11 +934,30 @@ func (cs *ClientServer) disconnectFromPeer(peerID peer.ID) {
 	}
 }
 
+// TODO remove
+func (cs *ClientServer) printCredentials(credentials *workspaceCredentials) {
+	var sb strings.Builder
+
+	if credentials.privateKey != nil {
+		sb.WriteString(fmt.Sprintf("  CRED PRV :%s  ", *credentials.privateKey))
+	}
+
+	if credentials.publicKey != nil {
+		sb.WriteString(fmt.Sprintf("  CRED PUB :%s  ", *credentials.publicKey))
+	}
+
+	if credentials.password != nil {
+		sb.WriteString(fmt.Sprintf("  CRED PASS :%s  ", *credentials.password))
+	}
+
+	cs.logger.Info(sb.String())
+}
+
 // handleHandshake executes the handshake process
 func (cs *ClientServer) handleHandshake(
 	peerID peer.ID,
 	workspaceMnemonic string,
-	info *handshakeInfo,
+	credentials *workspaceCredentials,
 ) error {
 	stream, err := cs.host.NewStream(cs.ctx, peerID, protocol.ID(config.ClientVerificationProto))
 	if err != nil {
@@ -951,6 +969,16 @@ func (cs *ClientServer) handleHandshake(
 		}
 	}(stream)
 
+	// Local workspace info
+	workspaceInfo, findErr := storage.GetStorageHandler().GetWorkspaceInfo(workspaceMnemonic)
+	if findErr != nil {
+		return fmt.Errorf("unable to retrieve workspace info, %v", findErr)
+	}
+
+	if workspaceInfo == nil {
+		return errors.New("workspace info not found")
+	}
+
 	// Grab the wrapped connection
 	clientConn := WrapStreamInClient(stream)
 
@@ -959,8 +987,19 @@ func (cs *ClientServer) handleHandshake(
 
 	verificationRequest := &proto.VerificationRequest{}
 	verificationRequest.WorkspaceMnemonic = workspaceMnemonic
-	if info.publicKey != nil {
-		verificationRequest.PublicKey = info.publicKey
+
+	cs.logger.Info(fmt.Sprintf("CHALLENGE TYPE IS %s", workspaceInfo.SecurityType))
+	cs.printCredentials(credentials)
+	if workspaceInfo.SecurityType == "password" && credentials.password == nil {
+		// Password challenge
+		return errors.New("no password for password challenge")
+	} else {
+		// Public key challenge
+		if credentials.publicKey == nil {
+			return errors.New("no public key for public key challenge")
+		}
+
+		verificationRequest.PublicKey = credentials.publicKey
 	}
 
 	challenge, challengeErr := clientProto.BeginVerification(
@@ -974,22 +1013,22 @@ func (cs *ClientServer) handleHandshake(
 	var challengeSolution *proto.ChallengeSolution
 	challengeSolution = nil
 
-	if info.publicKey != nil {
-		// Public key challenge
-		publicKeyChallengeSolution, solveErr := SolvePublicKeyChallenge(challenge, *info.privateKey)
-		if solveErr != nil {
-			return solveErr
-		}
-
-		challengeSolution = publicKeyChallengeSolution
-	} else {
+	if workspaceInfo.SecurityType == "password" {
 		// Password challenge
-		passwordChallengeSolution, solveErr := SolvePasswordChallenge(challenge, *info.password)
+		passwordChallengeSolution, solveErr := SolvePasswordChallenge(challenge, *credentials.password)
 		if solveErr != nil {
 			return solveErr
 		}
 
 		challengeSolution = passwordChallengeSolution
+	} else {
+		// Public key challenge
+		publicKeyChallengeSolution, solveErr := SolvePublicKeyChallenge(challenge, *credentials.privateKey)
+		if solveErr != nil {
+			return solveErr
+		}
+
+		challengeSolution = publicKeyChallengeSolution
 	}
 
 	// Now that the challenge is solved,
@@ -1040,6 +1079,7 @@ type joinRequest struct {
 }
 
 // BeginVerification starts the verification process and returns the challenge
+// This handler is run when someone requests a challenge from us
 func (cs *ClientServer) BeginVerification(
 	context context.Context,
 	request *proto.VerificationRequest,
@@ -1054,10 +1094,11 @@ func (cs *ClientServer) BeginVerification(
 			findErr,
 		)
 
-		return nil, errors.New("unknown workspace")
+		return nil, fmt.Errorf("unknown workspace [%s]", request.WorkspaceMnemonic)
 	}
 
-	workspaceCredentials, findCredErr := storage.GetStorageHandler().GetWorkspaceCredentials(request.WorkspaceMnemonic)
+	// Grab our own workspace credentials
+	credentials, findCredErr := storage.GetStorageHandler().GetWorkspaceCredentials(request.WorkspaceMnemonic)
 	if findCredErr != nil {
 		cs.logger.Error(
 			"Verification requested for unknown workspace ",
@@ -1066,7 +1107,7 @@ func (cs *ClientServer) BeginVerification(
 			findErr,
 		)
 
-		return nil, errors.New("unknown workspace")
+		return nil, errors.New("cannot find workspace credentials")
 	}
 
 	var challenge *proto.Challenge
@@ -1076,17 +1117,30 @@ func (cs *ClientServer) BeginVerification(
 	if workspaceInfo.SecurityType == "password" {
 		cs.logger.Debug("Verification with password")
 
-		if workspaceCredentials.Password == nil {
-			cs.logger.Error("Invalid credentials")
+		if credentials.Password == nil {
+			cs.logger.Error("Missing password credentials")
 
-			return nil, errors.New("unknown workspace")
+			return nil, errors.New("missing password credentials")
 		}
+
+		passwordHash := localCrypto.NewSHA256([]byte(*credentials.Password))
+		passwordHash = localCrypto.NewSHA256(passwordHash)
+
+		// Check if our local password is correct
+		infoHash := workspaceInfo.SecuritySettings.(*proto.WorkspaceInfo_PasswordHash).PasswordHash
+		if hex.EncodeToString(passwordHash) != infoHash {
+			cs.logger.Error("Verifier invalid password credentials")
+
+			return nil, errors.New("verifier invalid password credentials")
+		}
+
+		// We construct the challenge with our own local password
 		passwordChallenge, constructErr := ConstructPasswordChallenge(
 			unencryptedData,
-			*workspaceCredentials.Password,
+			*credentials.Password,
 		)
 		if constructErr != nil {
-			return nil, errors.New("unable to construct challenge")
+			return nil, errors.New("unable to construct password challenge")
 		}
 
 		challenge = passwordChallenge
@@ -1096,22 +1150,30 @@ func (cs *ClientServer) BeginVerification(
 
 		// Check if the contact attached a public key
 		if request.PublicKey == nil {
-			return nil, errors.New("invalid request")
+			return nil, errors.New("invalid request - missing public key")
 		}
 
 		// Search for the public key in permitted contacts
-		if workspaceCredentials.PublicKey == nil {
-			cs.logger.Error("Invalid credentials")
+		matchFound := false
+		permittedKeys := workspaceInfo.SecuritySettings.(*proto.WorkspaceInfo_ContactsWrapper).ContactsWrapper.ContactPublicKeys
+		for _, permittedKey := range permittedKeys {
+			if permittedKey == *request.PublicKey {
+				matchFound = true
+				break
+			}
+		}
+		if !matchFound {
+			cs.logger.Error("Invalid credentials in request - not permitted")
 
-			return nil, errors.New("unknown workspace")
+			return nil, errors.New("invalid credentials - not permitted")
 		}
 
 		publicKeyChallenge, constructErr := ConstructPublicKeyChallenge(
 			unencryptedData,
-			*workspaceCredentials.PublicKey,
+			*request.PublicKey,
 		)
 		if constructErr != nil {
-			return nil, errors.New("unable to construct challenge")
+			return nil, errors.New("unable to construct public key challenge")
 		}
 
 		challenge = publicKeyChallenge
@@ -1122,7 +1184,7 @@ func (cs *ClientServer) BeginVerification(
 	}
 
 	// Save join request locally
-	cs.joinRequests[challenge.ChallengeId] = &joinRequest{
+	cs.joinRequests[challenge.ChallengeId] = &joinRequest{ // TODO prune this
 		workspaceMnemonic: workspaceInfo.Mnemonic,
 		challenge:         challenge,
 		unencryptedData:   unencryptedData,
@@ -1138,6 +1200,11 @@ func (cs *ClientServer) FinishVerification(
 ) (*proto.VerificationResponse, error) {
 	// Check if we have the pending request
 	pendingJoinRequest, found := cs.joinRequests[request.ChallengeId]
+	defer func() {
+		// Remove the join request
+		delete(cs.joinRequests, request.ChallengeId)
+	}()
+
 	if !found {
 		// TODO close connection to peer
 		return ConstructVerificationResponse("Unknown challenge", false),
@@ -1158,9 +1225,6 @@ func (cs *ClientServer) FinishVerification(
 		return ConstructVerificationResponse("Invalid decrypt data", false),
 			errors.New("invalid decrypted data")
 	}
-
-	// Remove the join request
-	delete(cs.joinRequests, request.ChallengeId)
 
 	// Add the peer to verified peers
 	typedContext := context.(*WrappedContext)
@@ -1223,7 +1287,7 @@ func (cs *ClientServer) JoinWorkspacePassword(
 
 	workspacePasswordHash := workspaceInfo.SecuritySettings.(*proto.WorkspaceInfo_PasswordHash).PasswordHash
 
-	return workspacePasswordHash == password
+	return workspacePasswordHash == hex.EncodeToString(passwordHash)
 }
 
 // JoinWorkspacePublicKey handles workspace join requests with public keys

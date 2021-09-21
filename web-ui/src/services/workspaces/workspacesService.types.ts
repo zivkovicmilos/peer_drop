@@ -1,13 +1,10 @@
-import {
-  ENewWorkspaceType,
-  ENWAccessControl
-} from '../../context/newWorkspaceContext.types';
+import { ENewWorkspaceType } from '../../context/newWorkspaceContext.types';
 import { IContactResponse } from '../contacts/contactsService.types';
 
 export interface INewWorkspaceRequest {
   workspaceName: string;
   workspaceType: ENewWorkspaceType;
-  workspaceAccessControlType: ENWAccessControl;
+  workspaceAccessControlType: 'password' | 'contacts';
   baseWorkspaceOwnerKeyID: string;
 
   workspaceAccessControl: {

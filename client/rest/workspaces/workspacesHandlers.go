@@ -3,6 +3,7 @@ package workspaces
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -48,7 +49,7 @@ func CreateWorkspace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if workspaceRequest.WorkspaceAccessControlType == "password" {
+	if workspaceInfo.SecurityType == "password" {
 		password := workspaceRequest.WorkspaceAccessControl.Password
 		// Save the workspace credentials
 		if createErr = storage.GetStorageHandler().CreateWorkspaceCredentials(
@@ -99,6 +100,7 @@ func GetWorkspaceInfo(w http.ResponseWriter, r *http.Request) {
 		// Not found locally, check the rendezvous
 		clientServer := servicehandler.GetServiceHandler().GetClientServer()
 		workspaceInfo, workspaceError = clientServer.GetWorkspaceInfo(mnemonic)
+		fmt.Printf("\nworkspace err %v\n", workspaceError)
 		if workspaceError != nil {
 			http.Error(w, "Unable to find workspace", http.StatusInternalServerError)
 			return
@@ -151,7 +153,7 @@ func JoinWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 
 	confirmed := false
-	if workspaceInfo.WorkspaceType == "password" {
+	if workspaceInfo.SecurityType == "password" {
 		// Password authentication
 		confirmed = clientServer.JoinWorkspacePassword(workspaceInfo, joinWorkspaceRequest.Password)
 		if createErr := storage.GetStorageHandler().CreateWorkspaceInfo(workspaceInfo); createErr != nil {

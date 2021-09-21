@@ -44,7 +44,7 @@ var (
 // Default rendezvous nodes that are already up and running
 var (
 	DefaultRendezvousNodes = []string{
-		"/ip4/0.0.0.0/tcp/10002/p2p/QmQ2sVwJpPF4cp6ScxJs43EYZeiXeuxQDN4gXJyDSuX3tw", // TODO set
+		"/ip4/0.0.0.0/tcp/10002/p2p/QmazBF7EJ54NWwVLEGBUPfHnKWW8sn8UvuiwynmhnrRQib", // TODO set
 	}
 )
 

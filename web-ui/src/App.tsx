@@ -34,7 +34,7 @@ function App() {
         setUserIdentity(response);
       })
       .catch((err) => {
-        if (err && err.response.status == 404) {
+        if (err && err.response && err.response.status == 404) {
           setUserIdentity(null);
         } else {
           openSnackbar('Unable to load primary identity', 'error');

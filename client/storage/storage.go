@@ -637,9 +637,9 @@ func (sh *StorageHandler) GetWorkspaceInfo(mnemonic string) (*proto.WorkspaceInf
 	workspaceOwnerPKMap := make(map[int]string)
 	workspaceContactPKMap := make(map[int]string)
 
-	keyBase := append(WORKSPACE_INFO, delimiter...)
+	keyBase := append(append(WORKSPACE_INFO, delimiter...), append([]byte(mnemonic), delimiter...)...)
 	iter := sh.db.NewIterator(
-		util.BytesPrefix(append(keyBase, []byte(mnemonic)...)), nil,
+		util.BytesPrefix(keyBase), nil,
 	)
 	for iter.Next() {
 		if foundWorkspaceInfo == nil {
@@ -653,6 +653,7 @@ func (sh *StorageHandler) GetWorkspaceInfo(mnemonic string) (*proto.WorkspaceInf
 		value := string(iter.Value())
 		// These attributes can be extracted in the form
 		// workspaceInfo:mnemonic:attributeName => value
+		// workspaceInfo:mnemonic:securityType
 		switch attributeName {
 		case "name":
 			foundWorkspaceInfo.Name = value
@@ -790,7 +791,7 @@ func (sh *StorageHandler) CreateWorkspaceInfo(workspaceInfo *proto.WorkspaceInfo
 			// Search index is
 			// workspaceInfo:<mnemonic>:workspaceOwner:<index>
 			searchIndex := append(
-				append(entityKeyBase, WORKSPACE_INFO_WORKSPACE_OWNER...), append(delimiter, workspaceOwnerIndex.Bytes()...)...,
+				append(entityKeyBase, WORKSPACE_INFO_WORKSPACE_OWNER...), append(delimiter, []byte(workspaceOwnerIndex.String())...)...,
 			)
 			foundInfo, _ := sh.db.Get(searchIndex, nil)
 			if foundInfo == nil || string(foundInfo) == "" {
@@ -849,7 +850,7 @@ func (sh *StorageHandler) CreateWorkspaceInfo(workspaceInfo *proto.WorkspaceInfo
 				// Search index is
 				// workspaceInfo:<mnemonic>:contact:<index>
 				searchIndex := append(
-					append(entityKeyBase, WORKSPACE_INFO_CONTACT...), append(delimiter, contactsIndex.Bytes()...)...,
+					append(entityKeyBase, WORKSPACE_INFO_CONTACT...), append(delimiter, []byte(contactsIndex.String())...)...,
 				)
 				foundInfo, _ := sh.db.Get(searchIndex, nil)
 				if foundInfo == nil || string(foundInfo) == "" {
