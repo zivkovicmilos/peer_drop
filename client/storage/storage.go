@@ -208,18 +208,22 @@ func (sh *StorageHandler) GetContacts(paginationLimits utils.PaginationLimits) (
 
 	totalContacts := len(foundContacts)
 
-	if paginationLimits != utils.NoPagination && totalContacts != 0 {
-		offset := (paginationLimits.Page - 1) * paginationLimits.Limit
-
-		upperBound := offset + paginationLimits.Limit
-		if upperBound > totalContacts {
-			upperBound = totalContacts
-		}
-
-		foundContacts = foundContacts[offset:upperBound]
-	} else {
-		foundContacts = []*types.Contact{}
+	if totalContacts == 0 {
+		return []*types.Contact{}, 0, err
 	}
+
+	if paginationLimits == utils.NoPagination {
+		return foundContacts, totalContacts, err
+	}
+
+	offset := (paginationLimits.Page - 1) * paginationLimits.Limit
+
+	upperBound := offset + paginationLimits.Limit
+	if upperBound > totalContacts {
+		upperBound = totalContacts
+	}
+
+	foundContacts = foundContacts[offset:upperBound]
 
 	return foundContacts, totalContacts, err
 }
@@ -604,18 +608,22 @@ func (sh *StorageHandler) GetIdentities(
 	}
 
 	// Enforce pagination
-	if paginationLimits != utils.NoPagination && totalIdentities != 0 {
-		offset := (paginationLimits.Page - 1) * paginationLimits.Limit
-
-		upperBound := offset + paginationLimits.Limit
-		if upperBound > totalIdentities {
-			upperBound = totalIdentities
-		}
-
-		foundIdentities = foundIdentities[offset:upperBound]
-	} else if totalIdentities == 0 {
-		foundIdentities = []*types.Identity{}
+	if totalIdentities == 0 {
+		return []*types.Identity{}, 0, err
 	}
+
+	if paginationLimits == utils.NoPagination {
+		return foundIdentities, totalIdentities, err
+	}
+
+	offset := (paginationLimits.Page - 1) * paginationLimits.Limit
+
+	upperBound := offset + paginationLimits.Limit
+	if upperBound > totalIdentities {
+		upperBound = totalIdentities
+	}
+
+	foundIdentities = foundIdentities[offset:upperBound]
 
 	return foundIdentities, totalIdentities, err
 }
@@ -720,18 +728,23 @@ func (sh *StorageHandler) GetWorkspaces(paginationLimits utils.PaginationLimits)
 
 	totalWorkspaces := len(foundWorkspaces)
 
-	if paginationLimits != utils.NoPagination && totalWorkspaces != 0 {
-		offset := (paginationLimits.Page - 1) * paginationLimits.Limit
-
-		upperBound := offset + paginationLimits.Limit
-		if upperBound > totalWorkspaces {
-			upperBound = totalWorkspaces
-		}
-
-		foundWorkspaces = foundWorkspaces[offset:upperBound]
-	} else {
-		foundWorkspaces = []*proto.WorkspaceInfo{}
+	// Enforce pagination
+	if totalWorkspaces == 0 {
+		return []*proto.WorkspaceInfo{}, 0, err
 	}
+
+	if paginationLimits == utils.NoPagination {
+		return foundWorkspaces, totalWorkspaces, err
+	}
+
+	offset := (paginationLimits.Page - 1) * paginationLimits.Limit
+
+	upperBound := offset + paginationLimits.Limit
+	if upperBound > totalWorkspaces {
+		upperBound = totalWorkspaces
+	}
+
+	foundWorkspaces = foundWorkspaces[offset:upperBound]
 
 	return foundWorkspaces, totalWorkspaces, err
 }

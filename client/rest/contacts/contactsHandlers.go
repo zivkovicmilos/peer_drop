@@ -129,10 +129,12 @@ func CreateContact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	email, emailError := crypto.GetEmailFromPublicKey(contact.PublicKey)
+	var email string
+	retrievedEmail, emailError := crypto.GetEmailFromPublicKey(contact.PublicKey)
 	if emailError != nil {
-		http.Error(w, "Invalid public key", http.StatusBadRequest)
-		return
+		email = "unknown"
+	} else {
+		email = retrievedEmail
 	}
 
 	contact.ID = uuid.New().String()

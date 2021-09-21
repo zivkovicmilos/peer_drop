@@ -69,7 +69,7 @@ func (d *Dispatcher) Start(closeChannel chan struct{}) {
 	d.registerEndpoints()
 
 	corsConfig := cors.New(cors.Options{
-		AllowedOrigins: []string{"http://localhost:3000"},
+		AllowedOrigins: []string{"http://localhost:3000", "http://localhost:4000"},
 		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 	})
 
@@ -160,6 +160,7 @@ func (d *Dispatcher) registerEndpoints() {
 
 	// Workspaces
 	d.router.HandleFunc("/api/workspaces", workspaces.CreateWorkspace).Methods("POST")
+	d.router.HandleFunc("/api/join-workspace", workspaces.JoinWorkspace).Methods("POST")
 	d.router.HandleFunc("/api/workspaces/{mnemonic}", workspaces.GetWorkspaceInfo).Methods("GET")
 
 	// Shutdown handler

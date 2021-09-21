@@ -71,7 +71,7 @@ func (fl *FileLister) sweepDirectory() {
 	}()
 
 	// Sweep directory for files
-	directoryFiles, err := ioutil.ReadDir("./")
+	directoryFiles, err := ioutil.ReadDir(fl.baseDir)
 	if err != nil {
 		fl.logger.Error(fmt.Sprintf("Unable to read directory, %v", err))
 		return
@@ -105,7 +105,7 @@ func (fl *FileLister) sweepDirectory() {
 
 // fileInfoToFileProto converts the regular file information into proto format
 func fileInfoToFileProto(file fs.FileInfo) *proto.File {
-	var protoFile *proto.File
+	protoFile := &proto.File{}
 
 	stringArr := strings.Split(file.Name(), ".")
 
@@ -130,13 +130,17 @@ func (fl *FileLister) sweepDirectoryLoop() {
 
 	// Start the loop
 	ticker := time.NewTicker(fl.sweepInterval)
+
+	go func() {
+		<-fl.stopChannel
+		ticker.Stop()
+
+		return
+	}()
 	for {
 		select {
 		case _ = <-ticker.C:
 			go fl.sweepDirectory()
-		case _ = <-fl.stopChannel:
-			ticker.Stop()
-			return
 		}
 	}
 }
@@ -154,8 +158,6 @@ func (fl *FileLister) checksumFile(path string) (string, error) {
 	if _, err = io.Copy(h, f); err != nil {
 		return "", err
 	}
-
-	fl.logger.Info(fmt.Sprintf("Checksum complete for file at path %s", path))
 
 	return fmt.Sprintf("%x", h.Sum(nil)), nil
 }

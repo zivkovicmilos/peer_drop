@@ -52,7 +52,7 @@ func ConstructPublicKeyChallenge(unencryptedData []byte, publicKeyPEM string) (*
 		return nil, parseErr
 	}
 
-	rsaPublicKey := publicKey.PublicKey.(rsa.PublicKey)
+	rsaPublicKey := publicKey.PublicKey.(*rsa.PublicKey)
 
 	// Encrypt the small message using RSA
 	// Another route would also be to leverage RSA signing,
@@ -61,7 +61,7 @@ func ConstructPublicKeyChallenge(unencryptedData []byte, publicKeyPEM string) (*
 	encryptedData, err := rsa.EncryptOAEP(
 		sha256.New(),
 		rand.Reader,
-		&rsaPublicKey,
+		rsaPublicKey,
 		unencryptedData,
 		nil)
 	if err != nil {
@@ -86,7 +86,7 @@ func SolvePasswordChallenge(
 	challenge *proto.Challenge,
 	password string,
 ) (*proto.ChallengeSolution, error) {
-	var solution *proto.ChallengeSolution
+	solution := &proto.ChallengeSolution{}
 	solution.ChallengeId = challenge.ChallengeId
 
 	key := crypto.NewSHA256([]byte(password))
@@ -118,7 +118,7 @@ func SolvePublicKeyChallenge(
 	challenge *proto.Challenge,
 	privateKeyPEM string,
 ) (*proto.ChallengeSolution, error) {
-	var solution *proto.ChallengeSolution
+	solution := &proto.ChallengeSolution{}
 	solution.ChallengeId = challenge.ChallengeId
 
 	privateKey, parseErr := crypto.ParsePrivateKeyFromPemStr(privateKeyPEM)
@@ -126,12 +126,12 @@ func SolvePublicKeyChallenge(
 		return nil, parseErr
 	}
 
-	rsaPrivateKey := privateKey.PrivateKey.(rsa.PrivateKey)
+	rsaPrivateKey := privateKey.PrivateKey.(*rsa.PrivateKey)
 
 	decryptedData, err := rsa.DecryptOAEP(
 		sha256.New(),
 		rand.Reader,
-		&rsaPrivateKey,
+		rsaPrivateKey,
 		challenge.EncryptedValue,
 		nil,
 	)

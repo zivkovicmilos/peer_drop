@@ -209,6 +209,7 @@ func GenerateKeyPair(request types.GenerateKeyPairRequest) (string, error) {
 		return "", fmt.Errorf("unable to create entity, %v", entityError)
 	}
 
+
 	// Encode the initial armor
 	buf := new(bytes.Buffer)
 	w, encodeError := armor.Encode(buf, openpgp.PrivateKeyType, nil)

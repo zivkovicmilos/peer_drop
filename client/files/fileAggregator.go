@@ -24,7 +24,7 @@ type FileAggregator struct {
 	fileArray     []*proto.File        // All files available to the client in the workspace
 
 	fileMapMuxMap map[string]sync.RWMutex
-	fileArrayMux  sync.RWMutex
+	fileArrayMux  sync.Mutex
 }
 
 // NewFileAggregator creates a new instance of the file aggregator
@@ -60,9 +60,9 @@ func (fa *FileAggregator) aggregateFilesLoop() {
 			// Parse the file list
 
 			// Find the differences
-			fa.fileArrayMux.RLock()
+			fa.fileArrayMux.Lock()
 			fileDifferences := fa.findFileDifference(fa.fileArray, fileListWrapper.FileList.FileList)
-			fa.fileArrayMux.RUnlock()
+			fa.fileArrayMux.Unlock()
 
 			// Update all the relevant structures
 			fa.pruneFileMap(fileDifferences, fileListWrapper.PeerID)
@@ -80,7 +80,7 @@ func (fa *FileAggregator) findFileDifference(a, b []*proto.File) []*proto.File {
 		mb[x.FileChecksum] = struct{}{}
 	}
 
-	var diff []*proto.File
+	diff := make([]*proto.File, 0)
 	for _, x := range a {
 		if _, found := mb[x.FileChecksum]; !found {
 			diff = append(diff, x)
@@ -163,8 +163,8 @@ func (fa *FileAggregator) pruneFromPeerArray(peerArray []peer.ID, peerID peer.ID
 
 // GetFileList returns the available file list
 func (fa *FileAggregator) GetFileList() []*proto.File {
-	fa.fileArrayMux.RLock()
-	defer fa.fileArrayMux.RUnlock()
+	fa.fileArrayMux.Lock()
+	defer fa.fileArrayMux.Unlock()
 
 	return fa.fileArray
 }

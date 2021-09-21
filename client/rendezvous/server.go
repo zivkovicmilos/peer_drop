@@ -33,10 +33,11 @@ var (
 )
 
 type RendezvousServer struct {
-	logger           hclog.Logger
-	nodeConfig       *config.NodeConfig
-	rendezvousConfig *config.RendezvousConfig
-	closeChannel     chan struct{}
+	logger            hclog.Logger
+	nodeConfig        *config.NodeConfig
+	rendezvousConfig  *config.RendezvousConfig
+	closeChannel      chan struct{}
+	pubSubStopChannel chan struct{}
 
 	// Networking metadata //
 	me   peer.ID
@@ -116,7 +117,9 @@ func (r *RendezvousServer) Start(closeChannel chan struct{}) {
 
 	r.host = rendezvousHost
 
-	_, err = dht.New(ctx, rendezvousHost)
+	options := []dht.Option{dht.Mode(dht.ModeServer)}
+
+	_, err = dht.New(ctx, rendezvousHost, options...)
 	if err != nil {
 		r.logger.Error(fmt.Sprintf("Unable to start DHT service, %v", err))
 
@@ -146,14 +149,12 @@ func (r *RendezvousServer) Start(closeChannel chan struct{}) {
 	// Set up the GRPC protocol handlers
 	r.setupGRPCProtocols()
 
-	// TODO remove
-	//go r.statusDummy()
-
 	// Wait for a close signal
 	<-closeChannel
 
 	// Alert the running routines to stop
 	r.closeChannel <- struct{}{}
+	r.pubSubStopChannel <- struct{}{}
 }
 
 func (r *RendezvousServer) statusDummy() {
@@ -233,9 +234,12 @@ func (r *RendezvousServer) setupPubsub() error {
 func (r *RendezvousServer) readPubsubLoop() {
 	go r.storageUpdateListener()
 
+	pubSubStopChannel := make(chan struct{})
+	r.pubSubStopChannel = pubSubStopChannel
+
 	for {
 		select {
-		case _ = <-r.closeChannel:
+		case _ = <-r.pubSubStopChannel:
 			close(r.workspaceInfoMsgQueue)
 			return
 		default:

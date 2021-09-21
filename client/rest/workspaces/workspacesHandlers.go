@@ -126,6 +126,12 @@ func GetWorkspaceInfo(w http.ResponseWriter, r *http.Request) {
 func JoinWorkspace(w http.ResponseWriter, r *http.Request) {
 	var joinWorkspaceRequest types.JoinWorkspaceRequest
 
+	decodeErr := json.NewDecoder(r.Body).Decode(&joinWorkspaceRequest)
+	if decodeErr != nil {
+		http.Error(w, "Unable to parse input", http.StatusBadRequest)
+		return
+	}
+
 	if joinWorkspaceRequest.Password == "" && joinWorkspaceRequest.PublicKeyID == "" {
 		http.Error(w, "Invalid params", http.StatusBadRequest)
 		return

@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-hclog"
 	"github.com/libp2p/go-libp2p"
+	newDiscovery "github.com/libp2p/go-libp2p-core/discovery"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -181,9 +182,12 @@ func (cs *ClientServer) Start(closeChannel chan struct{}) {
 	defer cs.Stop()
 
 	cs.host = clientHost
+	cs.me = clientHost.ID()
 
 	// Set up the local DHT
-	kademliaDHT, err := dht.New(ctx, clientHost)
+	options := []dht.Option{dht.Mode(dht.ModeServer)}
+
+	kademliaDHT, err := dht.New(ctx, clientHost, options...)
 	if err != nil {
 		cs.logger.Error(fmt.Sprintf("Unable to start Kademlia DHT, %v", err))
 
@@ -204,6 +208,9 @@ func (cs *ClientServer) Start(closeChannel chan struct{}) {
 
 	// Dial the rendezvous nodes
 	cs.dialRendezvous()
+
+	// Set GRPC protocol handlers
+	cs.setupProtocols()
 
 	// Start the workspace handler loop
 	go cs.workspaceJoinHandler()
@@ -230,27 +237,34 @@ func (cs *ClientServer) Stop() {
 
 	// Stop all find peers loops
 	for _, findPeerLoop := range cs.findPeersStop {
-		findPeerLoop <- struct{}{}
+		go func(findPeerLoop chan struct{}) {
+			findPeerLoop <- struct{}{}
+		}(findPeerLoop)
 	}
 
 	// Stop the topic subscribers
 	for _, subscription := range cs.pubsubSubscriptionsStop {
-		subscription <- struct{}{}
+		go func(subscription chan struct{}) {
+			subscription <- struct{}{}
+		}(subscription)
 	}
 
 	// Stop the topic publishers
 	for _, topic := range cs.pubsubTopicsStop {
-		topic <- struct{}{}
+		go func(topic chan struct{}) {
+			topic <- struct{}{}
+
+		}(topic)
 	}
 
 	// Stop the file listers
 	for _, fileLister := range cs.fileListerMap {
-		fileLister.Stop()
+		go fileLister.Stop()
 	}
 
 	// Stop the file aggregators
 	for _, fileAggregator := range cs.fileAggregatorMap {
-		fileAggregator.Stop()
+		go fileAggregator.Stop()
 	}
 
 	// Close the workspace handler loop
@@ -305,12 +319,17 @@ func (cs *ClientServer) startPeerDropService() error {
 
 	// For each individual workspace, initialize it
 	for _, workspaceInfo := range foundWorkspaces {
-		go func(workspaceInfo *proto.WorkspaceInfo) {
-			err := cs.initializeWorkspace(workspaceInfo)
-			if err != nil {
-				cs.logger.Error(fmt.Sprintf("Unable to initialize workspace, %v", err))
-			}
-		}(workspaceInfo)
+		//go func(workspaceInfo *proto.WorkspaceInfo) {
+		//	err := cs.initializeWorkspace(workspaceInfo)
+		//	if err != nil {
+		//		cs.logger.Error(fmt.Sprintf("Unable to initialize workspace, %v", err))
+		//	}
+		//}(workspaceInfo)
+		// TODO return to goroutine
+		err := cs.initializeWorkspace(workspaceInfo)
+		if err != nil {
+			cs.logger.Error(fmt.Sprintf("Unable to initialize workspace, %v", err))
+		}
 	}
 
 	cs.logger.Info("peer_drop service started")
@@ -445,7 +464,7 @@ func (cs *ClientServer) unregisterFileLister(mnemonic string) {
 // for a specific workspace
 func (cs *ClientServer) findPeersWrapper(workspaceInfo *proto.WorkspaceInfo) error {
 	// Contains necessary information to perform new peer handshakes
-	var info *handshakeInfo
+	info := &handshakeInfo{}
 
 	workspaceCredentials, getErr := storage.GetStorageHandler().GetWorkspaceCredentials(workspaceInfo.Mnemonic)
 	if getErr != nil {
@@ -500,6 +519,7 @@ func (cs *ClientServer) startSubscriptionListener(mnemonic string) {
 		select {
 		case _ = <-stopChannel:
 			cs.logger.Info(fmt.Sprintf("Stopping subscription listener for mnemonic [%s]", mnemonic))
+			subscription.Cancel()
 			return
 		default:
 		}
@@ -508,7 +528,7 @@ func (cs *ClientServer) startSubscriptionListener(mnemonic string) {
 			cs.logger.Error(fmt.Sprintf("Unable to parse message, %v", err))
 			return
 		}
-		cs.logger.Info("Received a new file list message for mnemonic ", mnemonic)
+		cs.logger.Info(fmt.Sprintf("Received a new file list message for mnemonic [%s]", mnemonic))
 
 		// Forward messages that are not from us
 		if fileListMessage.ReceivedFrom == cs.me {
@@ -540,41 +560,47 @@ func (cs *ClientServer) startTopicPublisher(mnemonic string) {
 	stopChannel := make(chan struct{})
 	cs.pubsubTopicsStop[mnemonic] = stopChannel
 
-	mux, _ := cs.fileAggregatorMuxMap[mnemonic]
+	mux, _ := cs.fileListerMuxMap[mnemonic]
 	mux.RLock()
-	fileAggregator := cs.fileAggregatorMap[mnemonic]
+	fileLister := cs.fileListerMap[mnemonic]
+	fileLister.Start()
 	mux.RUnlock()
 
 	for {
 		select {
 		case _ = <-stopChannel:
 			ticker.Stop()
+			_ = topic.Close()
 			cs.logger.Info(fmt.Sprintf("Stopping topic publisher for mnemonic [%s]", mnemonic))
 			return
 
 		// Every 5 seconds, share the file list
 		case _ = <-ticker.C:
 			// Compile file list
-			fileList := &proto.FileList{
-				FileList: fileAggregator.GetFileList(),
-			}
+			localFileList := fileLister.GetAvailableFiles()
+			if len(localFileList) > 0 {
 
-			// Share the file list to the topic
-			marshaler := jsonpb.Marshaler{}
-			buf := new(bytes.Buffer)
-			err := marshaler.Marshal(buf, fileList)
-			if err != nil {
-				cs.logger.Error(fmt.Sprintf("Unable to marshal file list, %v", err))
-				continue
-			}
+				fileList := &proto.FileList{
+					FileList: localFileList,
+				}
 
-			sendErr := topic.Publish(topicContext, buf.Bytes())
-			if sendErr != nil {
-				cs.logger.Error(fmt.Sprintf("Unable to publish local file list, %v", sendErr))
-				continue
-			}
+				// Share the file list to the topic
+				marshaler := jsonpb.Marshaler{}
+				buf := new(bytes.Buffer)
+				err := marshaler.Marshal(buf, fileList)
+				if err != nil {
+					cs.logger.Error(fmt.Sprintf("Unable to marshal file list, %v", err))
+					continue
+				}
 
-			cs.logger.Info("Workspace file list successfully published")
+				sendErr := topic.Publish(topicContext, buf.Bytes())
+				if sendErr != nil {
+					cs.logger.Error(fmt.Sprintf("Unable to publish local file list, %v", sendErr))
+					continue
+				}
+
+				cs.logger.Info("Workspace file list successfully published")
+			}
 		}
 	}
 }
@@ -782,14 +808,24 @@ func (cs *ClientServer) workspaceRequestToWorkspaceInfo(
 func (cs *ClientServer) findPeers(workspaceMnemonic string, info *handshakeInfo) {
 	findPeersCtx, cancelFunc := context.WithCancel(context.Background())
 
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(10 * time.Second)
 	routingDiscovery := discovery.NewRoutingDiscovery(cs.kademliaDHT)
-	discovery.Advertise(findPeersCtx, routingDiscovery, workspaceMnemonic)
+	discovery.Advertise(findPeersCtx, routingDiscovery, workspaceMnemonic, newDiscovery.TTL(time.Second*5))
 	cs.logger.Info(fmt.Sprintf("Successfully announced workspace file request [%s]", workspaceMnemonic))
 
 	closeChannel := make(chan struct{})
 	cs.findPeersStop[workspaceMnemonic] = closeChannel
 
+	cs.logger.Info(fmt.Sprintf("We are %s", cs.me.String()))
+
+	// Instantiate verified peers list
+	mux, _ := cs.verifiedPeersMuxMap[workspaceMnemonic]
+	mux.Lock()
+	verifiedPeers := make([]peer.ID, 0)
+	cs.verifiedPeers[workspaceMnemonic] = verifiedPeers
+	mux.Unlock()
+
+	advertiseString := workspaceMnemonic
 	for {
 		select {
 		case <-closeChannel:
@@ -798,8 +834,9 @@ func (cs *ClientServer) findPeers(workspaceMnemonic string, info *handshakeInfo)
 			return
 		case _ = <-ticker.C:
 			// Find peers
-			cs.logger.Info("Searching for other peers...")
-			peerChan, err := routingDiscovery.FindPeers(findPeersCtx, workspaceMnemonic)
+			cs.logger.Info(fmt.Sprintf("I have exactly %d peers", len(cs.host.Network().Peers())))
+			cs.logger.Info(fmt.Sprintf("Searching for other peers [%s]...", advertiseString))
+			peerChan, err := routingDiscovery.FindPeers(findPeersCtx, advertiseString)
 			if err != nil {
 				cs.logger.Error("Unable to find peers ", err)
 				continue
@@ -807,8 +844,9 @@ func (cs *ClientServer) findPeers(workspaceMnemonic string, info *handshakeInfo)
 
 			// Attempt to verify these peers
 			// TODO make sure this is not infinite
+			cs.logger.Debug(fmt.Sprintf("Number of peers found %d", len(peerChan)))
 			for foundPeer := range peerChan {
-				if foundPeer.ID == cs.me {
+				if foundPeer.ID.String() == cs.me.String() {
 					continue
 				}
 
@@ -819,14 +857,17 @@ func (cs *ClientServer) findPeers(workspaceMnemonic string, info *handshakeInfo)
 
 				if cs.isVerifiedPeer(foundPeer.ID, workspaceMnemonic) {
 					// peer already verified
+					cs.logger.Info(fmt.Sprintf("Peer %s already verified...", foundPeer.ID.String()))
 					continue
+				} else {
+					cs.logger.Info(fmt.Sprintf("Peer %s NOT verified...", foundPeer.ID.String()))
 				}
 
 				// Mark the peer as pending for the handshake
 				cs.setPendingPeer(foundPeer.ID)
 
-				cs.logger.Info("Found peer", foundPeer.ID)
-				cs.logger.Info("Attempting connection to peer", foundPeer.ID)
+				cs.logger.Info(fmt.Sprintf("Found peer %s", foundPeer.ID.Pretty()))
+				cs.logger.Info(fmt.Sprintf("Attempting connection to peer %s", foundPeer.ID))
 
 				go func(peerID peer.ID) {
 					defer func() {
@@ -841,6 +882,7 @@ func (cs *ClientServer) findPeers(workspaceMnemonic string, info *handshakeInfo)
 						cs.disconnectFromPeer(peerID)
 					} else {
 						cs.logger.Info(fmt.Sprintf("Peer verified and connection established [%s]", peerID))
+						//cs.addVerifiedPeer(workspaceMnemonic, peerID)
 					}
 				}(foundPeer.ID)
 			}
@@ -888,7 +930,7 @@ func (cs *ClientServer) isRendezvousNode(peerID peer.ID) bool {
 // disconnectFromPeer disconnects from a certain peer if there is a connection
 func (cs *ClientServer) disconnectFromPeer(peerID peer.ID) {
 	if cs.host.Network().Connectedness(peerID) == network.Connected {
-		cs.logger.Info("Disconnecting from peer", peerID)
+		cs.logger.Info(fmt.Sprintf("Disconnecting from peer %s", peerID))
 		_ = cs.host.Network().ClosePeer(peerID)
 	}
 }
@@ -915,7 +957,7 @@ func (cs *ClientServer) handleHandshake(
 	// Instantiate the proto client
 	clientProto := proto.NewVerificationServiceClient(clientConn.(*grpc.ClientConn))
 
-	var verificationRequest *proto.VerificationRequest
+	verificationRequest := &proto.VerificationRequest{}
 	verificationRequest.WorkspaceMnemonic = workspaceMnemonic
 	if info.publicKey != nil {
 		verificationRequest.PublicKey = info.publicKey
@@ -1012,7 +1054,19 @@ func (cs *ClientServer) BeginVerification(
 			findErr,
 		)
 
-		return nil, errors.New("unknown workspace") // TODO conform grpc error
+		return nil, errors.New("unknown workspace")
+	}
+
+	workspaceCredentials, findCredErr := storage.GetStorageHandler().GetWorkspaceCredentials(request.WorkspaceMnemonic)
+	if findCredErr != nil {
+		cs.logger.Error(
+			"Verification requested for unknown workspace ",
+			request.WorkspaceMnemonic,
+			"error",
+			findErr,
+		)
+
+		return nil, errors.New("unknown workspace")
 	}
 
 	var challenge *proto.Challenge
@@ -1020,9 +1074,16 @@ func (cs *ClientServer) BeginVerification(
 	unencryptedData := []byte(uuid.New().String())
 
 	if workspaceInfo.SecurityType == "password" {
+		cs.logger.Debug("Verification with password")
+
+		if workspaceCredentials.Password == nil {
+			cs.logger.Error("Invalid credentials")
+
+			return nil, errors.New("unknown workspace")
+		}
 		passwordChallenge, constructErr := ConstructPasswordChallenge(
 			unencryptedData,
-			"myPassword", // TODO change password
+			*workspaceCredentials.Password,
 		)
 		if constructErr != nil {
 			return nil, errors.New("unable to construct challenge")
@@ -1031,6 +1092,7 @@ func (cs *ClientServer) BeginVerification(
 		challenge = passwordChallenge
 	} else {
 		// Use the contacts public key to construct the challenge
+		cs.logger.Debug("Verification with public key")
 
 		// Check if the contact attached a public key
 		if request.PublicKey == nil {
@@ -1038,27 +1100,25 @@ func (cs *ClientServer) BeginVerification(
 		}
 
 		// Search for the public key in permitted contacts
-		contactsSecurity := workspaceInfo.SecuritySettings.(*proto.WorkspaceInfo_ContactsWrapper)
+		if workspaceCredentials.PublicKey == nil {
+			cs.logger.Error("Invalid credentials")
 
-		for _, publicKey := range contactsSecurity.ContactsWrapper.ContactPublicKeys {
-			if publicKey == *request.PublicKey {
-				// Key found, create the challenge
-				publicKeyChallenge, constructErr := ConstructPublicKeyChallenge(
-					unencryptedData,
-					publicKey,
-				)
-				if constructErr != nil {
-					return nil, errors.New("unable to construct challenge")
-				}
-
-				challenge = publicKeyChallenge
-				break
-			}
+			return nil, errors.New("unknown workspace")
 		}
+
+		publicKeyChallenge, constructErr := ConstructPublicKeyChallenge(
+			unencryptedData,
+			*workspaceCredentials.PublicKey,
+		)
+		if constructErr != nil {
+			return nil, errors.New("unable to construct challenge")
+		}
+
+		challenge = publicKeyChallenge
 	}
 
 	if challenge == nil {
-		return nil, errors.New("invalid request")
+		return nil, errors.New("unable to construct challenge")
 	}
 
 	// Save join request locally
@@ -1103,7 +1163,7 @@ func (cs *ClientServer) FinishVerification(
 	delete(cs.joinRequests, request.ChallengeId)
 
 	// Add the peer to verified peers
-	typedContext := context.(WrappedContext)
+	typedContext := context.(*WrappedContext)
 	cs.addVerifiedPeer(pendingJoinRequest.workspaceMnemonic, typedContext.PeerID)
 
 	return ConstructVerificationResponse("Verification success", true), nil
