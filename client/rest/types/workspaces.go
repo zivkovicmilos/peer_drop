@@ -31,3 +31,33 @@ type WorkspaceCredentials struct {
 	PrivateKey *string
 	Password   *string
 }
+
+type WorkspaceListResponse struct {
+	WorkspaceWrappers []WorkspaceInfoWrapper `json:"workspaceWrappers"`
+	Count             int                    `json:"count"`
+}
+
+type WorkspaceInfoWrapper struct {
+	WorkspaceMnemonic string `json:"workspaceMnemonic"`
+	WorkspaceName     string `json:"workspaceName"`
+}
+
+type WorkspaceDetailedResponse struct {
+	WorkspaceMnemonic string `json:"workspaceMnemonic"`
+	WorkspaceName     string `json:"workspaceName"`
+	WorkspaceType     string `json:"workspaceType"`
+
+	WorkspaceFiles []FileInfo `json:"workspaceFiles"`
+}
+
+type FileInfo struct {
+	Name         string `json:"name"`
+	Extension    string `json:"extension"`
+	Size         int64  `json:"size"`
+	DateModified int64  `json:"dateModified"`
+	Checksum     string `json:"checksum"`
+}
+
+type WorkspacePeersResponse struct {
+	NumPeers int `json:"numPeers"`
+}

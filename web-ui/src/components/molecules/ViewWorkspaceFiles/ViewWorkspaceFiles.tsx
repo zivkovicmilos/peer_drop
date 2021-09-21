@@ -14,8 +14,9 @@ import { makeStyles } from '@material-ui/core/styles';
 import GetAppRoundedIcon from '@material-ui/icons/GetAppRounded';
 import clsx from 'clsx';
 import moment from 'moment';
-import { FC, useEffect } from 'react';
+import { FC, useEffect, useState } from 'react';
 import FileIcon, { IconStyle } from 'react-fileicons';
+import { IWorkspaceDetailedFileResponse } from '../../../services/workspaces/workspacesService.types';
 import folderIcon from '../../../shared/assets/img/folder.png';
 import ColorUtils from '../../../shared/utils/ColorUtils';
 import CommonUtils from '../../../shared/utils/CommonUtils';
@@ -25,69 +26,51 @@ import NoData from '../../atoms/NoData/NoData';
 import Pagination from '../../atoms/Pagination/Pagination';
 import usePagination from '../../atoms/Pagination/pagination.hook';
 import useSnackbar from '../Snackbar/useSnackbar.hook';
-import {
-  FILE_TYPE,
-  IViewWorkspaceFilesProps
-} from './viewWorkspaceFiles.types';
+import { IViewWorkspaceFilesProps } from './viewWorkspaceFiles.types';
 
 const ViewWorkspaceFiles: FC<IViewWorkspaceFilesProps> = (props) => {
   const { workspaceInfo } = props;
 
-  const dummyDate = new Date();
-
-  const files = [
-    {
-      id: '1',
-      name: 'PoS Roadmap',
-      type: FILE_TYPE.FILE,
-      extension: 'doc',
-      modified: dummyDate,
-      size: 123123
-    },
-    {
-      id: '2',
-      name: 'IBFT Draft',
-      type: FILE_TYPE.FILE,
-      extension: 'pdf',
-      modified: dummyDate,
-      size: 123123
-    },
-    {
-      id: '3',
-      name: 'Onboarding',
-      type: FILE_TYPE.FOLDER,
-      modified: dummyDate,
-      size: 123123
-    },
-    {
-      id: '4',
-      name: 'Tasks',
-      type: FILE_TYPE.FILE,
-      extension: 'zip',
-      modified: dummyDate,
-      size: 123123
-    },
-    {
-      id: '5',
-      name: '.api-keys',
-      type: FILE_TYPE.FILE,
-      extension: '.api-keys',
-      modified: dummyDate,
-      size: 123123
-    }
-  ];
+  // Pagination is done locally
+  const [shownFiles, setShownFiles] = useState<{
+    files: IWorkspaceDetailedFileResponse[];
+  }>(null);
 
   const { page, count, setCount, limit, handlePageChange } = usePagination({
     limit: 8
   });
 
+  useEffect(() => {
+    if (workspaceInfo.workspaceFiles.length > 0) {
+      setShownFiles({ files: workspaceInfo.workspaceFiles.slice(0, limit) });
+    }
+
+    setCount(workspaceInfo.workspaceFiles.length);
+  }, [workspaceInfo]);
+
+  useEffect(() => {
+    if (workspaceInfo.workspaceFiles.length > 0) {
+      let offset = (page - 1) * limit;
+
+      let upperBound = offset + limit;
+      if (upperBound > workspaceInfo.workspaceFiles.length) {
+        upperBound = workspaceInfo.workspaceFiles.length;
+      }
+
+      setShownFiles({
+        files: workspaceInfo.workspaceFiles.slice(offset, upperBound)
+      });
+    }
+  }, [page]);
+
   const { openSnackbar } = useSnackbar();
 
   const classes = useStyles();
 
-  const handleDownload = (id: string) => {};
+  const handleDownload = (checksum: string) => {
+  };
 
-  const renderActions = (id: string) => {
+  const renderActions = (checksum: string) => {
     return (
       <Box display={'flex'} alignItems={'center'} justifyContent={'center'}>
         <IconButton
@@ -95,7 +78,7 @@ const ViewWorkspaceFiles: FC<IViewWorkspaceFilesProps> = (props) => {
             root: 'iconButtonRoot'
           }}
           onClick={() => {
-            handleDownload(id);
+            handleDownload(checksum);
           }}
         >
           <GetAppRoundedIcon
@@ -107,10 +90,6 @@ const ViewWorkspaceFiles: FC<IViewWorkspaceFilesProps> = (props) => {
       </Box>
     );
   };
-
-  useEffect(() => {
-    setCount(files.length);
-  }, []);
 
   const renderIcon = (extension: string) => {
     if (!extension) {
@@ -136,19 +115,11 @@ const ViewWorkspaceFiles: FC<IViewWorkspaceFilesProps> = (props) => {
     );
   };
 
-  const renderItemName = (
-    type: FILE_TYPE,
-    name: string,
-    extension?: string
-  ) => {
-    if (type == FILE_TYPE.FILE) {
-      return `${name}.${extension}`;
-    }
-
-    return name;
+  const renderItemName = (name: string, extension: string) => {
+    return `${name}.${extension}`;
   };
 
-  if (files && count > 0) {
+  if (shownFiles && count > 0) {
     return (
       <Box display={'flex'} width={'80%'} flexDirection={'column'}>
         <TableContainer
@@ -187,7 +158,7 @@ const ViewWorkspaceFiles: FC<IViewWorkspaceFilesProps> = (props) => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {files.map((row, index) => (
+              {shownFiles.files.map((row, index) => (
                 <TableRow key={`${row.name}-${index}`}>
                   <TableCell
                     className={clsx(classes.noBorder, classes.tableCell)}
@@ -196,7 +167,7 @@ const ViewWorkspaceFiles: FC<IViewWorkspaceFilesProps> = (props) => {
                     <Box display={'flex'} alignItems={'center'}>
                       {renderIcon(row.extension)}
                       <Typography className={classes.itemName}>
-                        {renderItemName(row.type, row.name, row.extension)}
+                        {renderItemName(row.name, row.extension)}
                       </Typography>
                     </Box>
                   </TableCell>
@@ -204,7 +175,7 @@ const ViewWorkspaceFiles: FC<IViewWorkspaceFilesProps> = (props) => {
                     className={clsx(classes.noBorder, classes.tableCell)}
                     align="center"
                   >
-                    {moment(row.modified).format('DD.MM.YYYY.')}
+                    {moment(row.dateModified).format('DD.MM.YYYY.')}
                   </TableCell>
                   <TableCell
                     className={clsx(classes.noBorder, classes.tableCell)}
@@ -216,7 +187,7 @@ const ViewWorkspaceFiles: FC<IViewWorkspaceFilesProps> = (props) => {
                     className={clsx(classes.noBorder, classes.tableCell)}
                     align="center"
                   >
-                    {renderActions(row.id)}
+                    {renderActions(row.checksum)}
                   </TableCell>
                 </TableRow>
               ))}
@@ -239,7 +210,7 @@ const ViewWorkspaceFiles: FC<IViewWorkspaceFilesProps> = (props) => {
       </Box>
     );
   } else if (count == 0) {
-    return <NoData text={'No contacts found'} />;
+    return <NoData text={'No files found'} />;
   } else {
     return <LoadingIndicator style={{ color: theme.palette.primary.main }} />;
   }

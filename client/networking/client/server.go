@@ -42,20 +42,20 @@ type ClientServer struct {
 	nodeConfig *config.NodeConfig
 
 	// Networking metadata //
-	me                  peer.ID              // the current node's peer ID
-	host                host.Host            // the reference to the libp2p host
-	rendezvousIDs       []peer.ID            // the peer IDs of the rendezvous nodes
-	verifiedPeers       map[string][]peer.ID // the peer IDs of nodes who've passed verification for the given mnemonic
-	pendingPeers        sync.Map             // peers awaiting verification. Only a single verification request is processed per user
-	pendingPeersSize    int64
-	kademliaDHT         *dht.IpfsDHT
-	pubSub              *pubsub.PubSub                  // Reference to the pubsub service
-	pubsubSubscriptions map[string]*pubsub.Subscription // In memory map of active subscriptions
-	pubsubTopics        map[string]*pubsub.Topic        // In memory map of active topics
-	//workspaceDirectoryMap map[string]string               // In memory map of workspace directories on disk (mnemonic -> dirName)
-	pubsubSubscriptionsStop map[string]chan struct{} // Stop channel map
-	pubsubTopicsStop        map[string]chan struct{} // Stop channel map
-	findPeersStop           map[string]chan struct{} // Stop channel map
+	me                      peer.ID              // the current node's peer ID
+	host                    host.Host            // the reference to the libp2p host
+	rendezvousIDs           []peer.ID            // the peer IDs of the rendezvous nodes
+	verifiedPeers           map[string][]peer.ID // the peer IDs of nodes who've passed verification for the given mnemonic
+	pendingPeers            sync.Map             // peers awaiting verification. Only a single verification request is processed per user
+	pendingPeersSize        int64
+	kademliaDHT             *dht.IpfsDHT
+	pubSub                  *pubsub.PubSub                  // Reference to the pubsub service
+	pubsubSubscriptions     map[string]*pubsub.Subscription // In memory map of active subscriptions
+	pubsubTopics            map[string]*pubsub.Topic        // In memory map of active topics
+	workspaceDirectoryMap   map[string]string               // In memory map of workspace directories on disk (mnemonic -> dirName)
+	pubsubSubscriptionsStop map[string]chan struct{}        // Stop channel map
+	pubsubTopicsStop        map[string]chan struct{}        // Stop channel map
+	findPeersStop           map[string]chan struct{}        // Stop channel map
 
 	// File handling //
 	fileListerMap     map[string]*files.FileLister     // In memory map of file lister services (mnemonic -> fileLister)
@@ -87,19 +87,20 @@ func NewClientServer(
 	nodeConfig *config.NodeConfig,
 ) *ClientServer {
 	return &ClientServer{
-		logger:               logger.Named("networking"),
-		nodeConfig:           nodeConfig,
-		rendezvousIDs:        make([]peer.ID, 0),
-		verifiedPeers:        make(map[string][]peer.ID),
-		joinRequests:         make(map[string]*joinRequest),
-		newWorkspaceChannel:  make(chan *proto.WorkspaceInfo),
-		pubsubTopics:         make(map[string]*pubsub.Topic),
-		pubsubSubscriptions:  make(map[string]*pubsub.Subscription),
-		fileListerMap:        make(map[string]*files.FileLister),
-		fileAggregatorMap:    make(map[string]*files.FileAggregator),
-		fileListerMuxMap:     make(map[string]sync.RWMutex),
-		verifiedPeersMuxMap:  make(map[string]sync.RWMutex),
-		fileAggregatorMuxMap: make(map[string]sync.RWMutex),
+		logger:                logger.Named("networking"),
+		nodeConfig:            nodeConfig,
+		rendezvousIDs:         make([]peer.ID, 0),
+		verifiedPeers:         make(map[string][]peer.ID),
+		joinRequests:          make(map[string]*joinRequest),
+		newWorkspaceChannel:   make(chan *proto.WorkspaceInfo),
+		workspaceDirectoryMap: make(map[string]string),
+		pubsubTopics:          make(map[string]*pubsub.Topic),
+		pubsubSubscriptions:   make(map[string]*pubsub.Subscription),
+		fileListerMap:         make(map[string]*files.FileLister),
+		fileAggregatorMap:     make(map[string]*files.FileAggregator),
+		fileListerMuxMap:      make(map[string]sync.RWMutex),
+		verifiedPeersMuxMap:   make(map[string]sync.RWMutex),
+		fileAggregatorMuxMap:  make(map[string]sync.RWMutex),
 
 		pubsubSubscriptionsStop: make(map[string]chan struct{}),
 		pubsubTopicsStop:        make(map[string]chan struct{}),
@@ -424,6 +425,7 @@ func (cs *ClientServer) initializeWorkspaceDirectory(name string, mnemonic strin
 	if createErr := globalUtils.CreateDirectory(shareDirectory); createErr != nil {
 		return createErr
 	}
+	cs.workspaceDirectoryMap[mnemonic] = shareDirectory
 
 	// Start the file lister service for this directory
 	fileLister := files.NewFileLister(
@@ -759,7 +761,7 @@ func (cs *ClientServer) workspaceRequestToWorkspaceInfo(
 	}
 
 	// Set access control type
-	if workspaceRequest.WorkspaceAccessControlType == "Password" {
+	if strings.ToLower(workspaceRequest.WorkspaceAccessControlType) == "password" {
 		workspaceInfo.SecurityType = "password"
 
 		// Hash the password, then hash the hash
@@ -881,6 +883,9 @@ func (cs *ClientServer) findPeers(workspaceMnemonic string, workspaceCredentials
 						cs.disconnectFromPeer(peerID)
 					} else {
 						cs.logger.Info(fmt.Sprintf("Peer verified and connection established [%s]", peerID))
+						if !cs.isVerifiedPeer(peerID, workspaceMnemonic) {
+							cs.addVerifiedPeer(workspaceMnemonic, peerID)
+						}
 						//cs.addVerifiedPeer(workspaceMnemonic, peerID)
 					}
 				}(foundPeer.ID)
@@ -990,9 +995,11 @@ func (cs *ClientServer) handleHandshake(
 
 	cs.logger.Info(fmt.Sprintf("CHALLENGE TYPE IS %s", workspaceInfo.SecurityType))
 	cs.printCredentials(credentials)
-	if workspaceInfo.SecurityType == "password" && credentials.password == nil {
+	if workspaceInfo.SecurityType == "password" {
 		// Password challenge
-		return errors.New("no password for password challenge")
+		if credentials.password == nil {
+			return errors.New("no password for password challenge")
+		}
 	} else {
 		// Public key challenge
 		if credentials.publicKey == nil {
@@ -1162,6 +1169,13 @@ func (cs *ClientServer) BeginVerification(
 				break
 			}
 		}
+		for _, workspaceOwnerKey := range workspaceInfo.WorkspaceOwnerPublicKeys {
+			if workspaceOwnerKey == *request.PublicKey {
+				matchFound = true
+				break
+			}
+		}
+
 		if !matchFound {
 			cs.logger.Error("Invalid credentials in request - not permitted")
 
@@ -1313,4 +1327,39 @@ func (cs *ClientServer) JoinWorkspacePublicKey(
 // has been joined
 func (cs *ClientServer) TriggerWorkspaceInit(workspaceInfo *proto.WorkspaceInfo) {
 	cs.newWorkspaceChannel <- workspaceInfo
+}
+
+// GetFileList is a helper function for querying the file aggregator
+func (cs *ClientServer) GetFileList(mnemonic string) []*proto.File {
+	mux, _ := cs.fileAggregatorMuxMap[mnemonic]
+	mux.RLock()
+	defer mux.RUnlock()
+	fileAggregator, ok := cs.fileAggregatorMap[mnemonic]
+	if !ok {
+		return []*proto.File{}
+	}
+
+	return fileAggregator.GetFileList()
+}
+
+// GetNumberOfPeers is a helper function for getting the number of connected peers
+func (cs *ClientServer) GetNumberOfPeers(mnemonic string) int {
+	topic, ok := cs.pubsubTopics[mnemonic]
+	if !ok {
+		cs.logger.Error(fmt.Sprintf("Requesting peer number for unknown topic [%s]", mnemonic))
+		return 0
+	}
+
+	return len(topic.ListPeers())
+}
+
+// GetWorkspaceSaveDir gets the directory where files should be saved for a specific workspace
+func (cs *ClientServer) GetWorkspaceSaveDir(mnemonic string) (string, error) {
+	directory, ok := cs.workspaceDirectoryMap[mnemonic]
+	if !ok {
+		cs.logger.Error(fmt.Sprintf("Requesting directory for unknown mnemonic [%s]", mnemonic))
+		return "", fmt.Errorf("requesting directory for unknown mnemonic [%s]", mnemonic)
+	}
+
+	return directory, nil
 }

@@ -1,5 +1,7 @@
+import { IWorkspaceDetailedFileResponse } from '../../../services/workspaces/workspacesService.types';
+
 export interface ISuggestedListProps {
-  files: IFileInfo[];
+  files: IWorkspaceDetailedFileResponse[];
 }
 
 export interface IFileInfo {

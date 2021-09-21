@@ -2,3 +2,4 @@
 /app_data*
 
 *.exe
+*.exe~

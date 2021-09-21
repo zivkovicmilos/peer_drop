@@ -1,5 +1,5 @@
-import { IFileInfo } from '../../molecules/SuggestedList/suggestedList.types';
+import { IWorkspaceDetailedFileResponse } from '../../../services/workspaces/workspacesService.types';
 
 export interface ISuggestedFileProps {
-  file: IFileInfo;
+  file: IWorkspaceDetailedFileResponse;
 }

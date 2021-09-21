@@ -37,3 +37,32 @@ export interface IJoinWorkspaceRequest {
   password: string;
   publicKeyID: string;
 }
+
+export interface IWorkspaceListResponse {
+  workspaceWrappers: IWorkspaceWrapper[];
+  count: number;
+}
+
+export interface IWorkspaceWrapper {
+  workspaceName: string;
+  workspaceMnemonic: string;
+}
+
+export interface IWorkspaceDetailedResponse {
+  workspaceMnemonic: string;
+  workspaceName: string;
+  workspaceType: string;
+  workspaceFiles: IWorkspaceDetailedFileResponse[];
+}
+
+export interface IWorkspaceDetailedFileResponse {
+  name: string;
+  extension: string;
+  size: number; // in bytes
+  dateModified: number; // unix time
+  checksum: string;
+}
+
+export interface IWorkspaceNumPeersResponse {
+  numPeers: number;
+}

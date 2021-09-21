@@ -1,6 +1,8 @@
 package utils
 
-import "os"
+import (
+	"os"
+)
 
 // CreateDirectory creates a single directory if it doesn't exist
 func CreateDirectory(path string) error {

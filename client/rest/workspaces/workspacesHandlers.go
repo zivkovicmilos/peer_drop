@@ -4,12 +4,16 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/gorilla/mux"
+	"github.com/zivkovicmilos/peer_drop/proto"
 	"github.com/zivkovicmilos/peer_drop/rest/types"
+	"github.com/zivkovicmilos/peer_drop/rest/utils"
 	servicehandler "github.com/zivkovicmilos/peer_drop/service-handler"
 	"github.com/zivkovicmilos/peer_drop/storage"
 )
@@ -100,7 +104,6 @@ func GetWorkspaceInfo(w http.ResponseWriter, r *http.Request) {
 		// Not found locally, check the rendezvous
 		clientServer := servicehandler.GetServiceHandler().GetClientServer()
 		workspaceInfo, workspaceError = clientServer.GetWorkspaceInfo(mnemonic)
-		fmt.Printf("\nworkspace err %v\n", workspaceError)
 		if workspaceError != nil {
 			http.Error(w, "Unable to find workspace", http.StatusInternalServerError)
 			return
@@ -122,6 +125,123 @@ func GetWorkspaceInfo(w http.ResponseWriter, r *http.Request) {
 	_, writeErr := w.Write(buf.Bytes())
 	if writeErr != nil {
 		http.Error(w, "Unable to encode response", http.StatusInternalServerError)
+	}
+}
+
+func formatWorkspaceListResponse(workspaceInfos []*proto.WorkspaceInfo, total int) types.WorkspaceListResponse {
+	workspaceWrappers := make([]types.WorkspaceInfoWrapper, 0)
+	for _, workspaceInfo := range workspaceInfos {
+		workspaceWrappers = append(workspaceWrappers, types.WorkspaceInfoWrapper{
+			WorkspaceMnemonic: workspaceInfo.Mnemonic,
+			WorkspaceName:     workspaceInfo.Name,
+		})
+	}
+
+	return types.WorkspaceListResponse{
+		WorkspaceWrappers: workspaceWrappers,
+		Count:             total,
+	}
+}
+
+// GetWorkspaces fetches all the workspaces
+func GetWorkspaces(w http.ResponseWriter, r *http.Request) {
+	limit := r.URL.Query().Get("limit")
+	page := r.URL.Query().Get("page")
+	paginationLimits := utils.ParsePagination(limit, page)
+
+	workspaces, totalWorkspaces, workspacesError := storage.GetStorageHandler().GetWorkspaces(paginationLimits)
+	if workspacesError != nil {
+		http.Error(w, "Unable to fetch workspaces", http.StatusInternalServerError)
+		return
+	}
+
+	if encodeErr := json.NewEncoder(w).Encode(formatWorkspaceListResponse(workspaces, totalWorkspaces)); encodeErr != nil {
+		http.Error(w, "Unable to encode response", http.StatusInternalServerError)
+		return
+	}
+}
+
+// formatFileList is a helper function for formatting the retrieved file list
+func formatFileList(fileList []*proto.File) []types.FileInfo {
+	responseList := make([]types.FileInfo, 0)
+
+	for _, file := range fileList {
+		responseList = append(responseList, types.FileInfo{
+			Name:         file.Name,
+			Extension:    file.Extension,
+			Size:         file.Size,
+			DateModified: file.DateModified,
+			Checksum:     file.FileChecksum,
+		})
+	}
+
+	return responseList
+}
+
+// GetWorkspaceFiles fetches all available files for download
+func GetWorkspaceFiles(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+
+	outputArr := strings.Split(params["mnemonic"], "-")
+	mnemonic := strings.Join(outputArr[:], " ")
+
+	// Check if we know this workspace
+	workspaceInfo, workspaceError := storage.GetStorageHandler().GetWorkspaceInfo(mnemonic)
+	if workspaceError != nil {
+		http.Error(w, "Unable to fetch workspace info", http.StatusInternalServerError)
+		return
+	}
+
+	if workspaceInfo == nil {
+		http.Error(w, "Workspace not found", http.StatusNotFound)
+		return
+	}
+
+	// Grab the file list from the clientServer
+	clientServer := servicehandler.GetServiceHandler().GetClientServer()
+	fileList := clientServer.GetFileList(mnemonic)
+
+	formattedList := formatFileList(fileList)
+
+	detailedResponse := &types.WorkspaceDetailedResponse{
+		WorkspaceMnemonic: workspaceInfo.Mnemonic,
+		WorkspaceName:     workspaceInfo.Name,
+		WorkspaceType:     workspaceInfo.WorkspaceType,
+		WorkspaceFiles:    formattedList,
+	}
+
+	if encodeErr := json.NewEncoder(w).Encode(detailedResponse); encodeErr != nil {
+		http.Error(w, "Unable to encode response", http.StatusInternalServerError)
+		return
+	}
+}
+
+// GetWorkspaceNumPeers returns the number of connected workspace peers
+func GetWorkspaceNumPeers(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+
+	outputArr := strings.Split(params["mnemonic"], "-")
+	mnemonic := strings.Join(outputArr[:], " ")
+
+	// Check if we know this workspace
+	workspaceInfo, workspaceError := storage.GetStorageHandler().GetWorkspaceInfo(mnemonic)
+	if workspaceError != nil {
+		http.Error(w, "Unable to fetch workspace info", http.StatusInternalServerError)
+		return
+	}
+
+	if workspaceInfo == nil {
+		http.Error(w, "Workspace not found", http.StatusNotFound)
+		return
+	}
+
+	// Grab the number of peers from the clientServer
+	clientServer := servicehandler.GetServiceHandler().GetClientServer()
+	numPeers := clientServer.GetNumberOfPeers(mnemonic)
+
+	if encodeErr := json.NewEncoder(w).Encode(&types.WorkspacePeersResponse{NumPeers: numPeers}); encodeErr != nil {
+		http.Error(w, "Unable to encode response", http.StatusInternalServerError)
+		return
 	}
 }
 
@@ -216,4 +336,62 @@ func JoinWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 
 	return
+}
+
+// AddFileToWorkspace uploads a new file to the workspace
+func AddFileToWorkspace(w http.ResponseWriter, r *http.Request) {
+	// Max size for now is 1 GB
+	if parseErr := r.ParseMultipartForm(1 * 1024 * 1024 * 1024); parseErr != nil {
+		http.Error(w, "Unable to parse file", http.StatusBadRequest)
+		return
+	}
+
+	formMnemonic := r.FormValue("mnemonic")
+	outputArr := strings.Split(formMnemonic, "-")
+	mnemonic := strings.Join(outputArr[:], " ")
+
+	formFile, handler, err := r.FormFile("workspaceFile")
+	if err != nil {
+		http.Error(w, "Unable to find form file", http.StatusBadRequest)
+		return
+	}
+	defer formFile.Close()
+
+	// Grab the save directory from the client server
+	clientServer := servicehandler.GetServiceHandler().GetClientServer()
+	saveDirectory, findErr := clientServer.GetWorkspaceSaveDir(mnemonic)
+	if findErr != nil {
+		http.Error(w, "Unknown workspace", http.StatusInternalServerError)
+		return
+	}
+
+	// Create the file in the save directory
+	saveFile, createErr := os.Create(
+		fmt.Sprintf("%s/%s", saveDirectory, handler.Filename),
+	)
+	if createErr != nil {
+		http.Error(w, "Unable to create file", http.StatusInternalServerError)
+		return
+	}
+
+	defer saveFile.Close()
+
+	// Read from the uploaded file
+	fileBytes, err := ioutil.ReadAll(formFile)
+	if err != nil {
+		http.Error(w, "Unable to read file", http.StatusInternalServerError)
+		return
+	}
+
+	// write this byte array to the created file
+	_, writeErr := saveFile.Write(fileBytes)
+	if writeErr != nil {
+		http.Error(w, "Unable to save file", http.StatusInternalServerError)
+		return
+	}
+
+	if encodeErr := json.NewEncoder(w).Encode("Workspace file uploaded!"); encodeErr != nil {
+		http.Error(w, "Unable to encode response", http.StatusInternalServerError)
+		return
+	}
 }

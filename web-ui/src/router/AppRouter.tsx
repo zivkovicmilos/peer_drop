@@ -19,7 +19,7 @@ const AppRouter = () => (
       <Route path={'/workspaces/new'} exact={true} component={NewWorkspace} />
       <Route path={'/workspaces/join'} exact={true} component={JoinWorkspace} />
       <Route
-        path={'/workspaces/view/:workspaceId'}
+        path={'/workspaces/view/:workspaceMnemonic'}
         exact={true}
         component={ViewWorkspace}
       />

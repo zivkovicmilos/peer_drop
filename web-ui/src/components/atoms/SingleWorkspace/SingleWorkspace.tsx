@@ -2,13 +2,15 @@ import { Box, Typography } from '@material-ui/core';
 import { makeStyles } from '@material-ui/core/styles';
 import React, { FC, useEffect, useState } from 'react';
 import { useHistory } from 'react-router-dom';
+import WorkspacesService from '../../../services/workspaces/workspacesService';
 import greenCircle from '../../../shared/assets/img/workspace_green.png';
 import redCircle from '../../../shared/assets/img/workspace_red.png';
 import theme from '../../../theme/theme';
+import useSnackbar from '../../molecules/Snackbar/useSnackbar.hook';
 import { ISingleWorkspaceProps } from './singleWorkspace.types';
 
 const SingleWorkspace: FC<ISingleWorkspaceProps> = (props) => {
-  const { title, id } = props;
+  const { title, id, mnemonic } = props;
 
   const classes = useStyles();
 
@@ -29,7 +31,6 @@ const SingleWorkspace: FC<ISingleWorkspaceProps> = (props) => {
     }
   };
 
-  const [numPeers, setNumPeers] = useState<number>(0);
   const [numPeersText, setNumPeersText] = useState<string>('');
   const [background, setBackground] = useState<string>('');
 
@@ -38,12 +39,8 @@ const SingleWorkspace: FC<ISingleWorkspaceProps> = (props) => {
     RED
   }
 
+  const [numPeers, setNumPeers] = useState<number>(0);
   const [circle, setCircle] = useState<CIRCLE_STATUS>(CIRCLE_STATUS.RED);
-
-  useEffect(() => {
-    let num = getRandomNum(0, 20);
-    setNumPeers(num);
-  }, []);
 
   useEffect(() => {
     setBackground(generateBackgroundColor());
@@ -59,7 +56,30 @@ const SingleWorkspace: FC<ISingleWorkspaceProps> = (props) => {
     }
   }, [numPeers]);
 
-  // TODO add live updating
+  const { openSnackbar } = useSnackbar();
+
+  const fetchNumPeers = () => {
+    const fetchPeers = async () => {
+      return await WorkspacesService.getWorkspacePeers(mnemonic);
+    };
+
+    fetchPeers()
+      .then((response) => {
+        setNumPeers(response.numPeers);
+      })
+      .catch((err) => {
+        openSnackbar('Unable to fetch peer count', 'error');
+      });
+  };
+
+  // Set the peer number updater
+  useEffect(() => {
+    const peerNumUpdater = setInterval(() => {
+      fetchNumPeers();
+    }, 3000);
+
+    return () => clearInterval(peerNumUpdater);
+  }, []);
 
   const renderNumPeers = (numPeers: number) => {
     if (numPeers == 0) {
@@ -82,7 +102,7 @@ const SingleWorkspace: FC<ISingleWorkspaceProps> = (props) => {
 
   const history = useHistory();
   const handleWorkspaceClick = () => {
-    history.push('/workspaces/view/' + id);
+    history.push('/workspaces/view/' + mnemonic);
   };
 
   return (

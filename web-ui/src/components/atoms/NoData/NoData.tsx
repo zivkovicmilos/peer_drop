@@ -5,13 +5,13 @@ import { ReactComponent as Clipboard } from '../../../shared/assets/icons/clipbo
 import { INoDataProps } from './noData.types';
 
 const NoData: FC<INoDataProps> = (props) => {
-  const { text } = props;
-
   const classes = useStyles();
+
+  const { text, icon = <Clipboard className={classes.clipboard} /> } = props;
 
   return (
     <Box className={classes.noDataWrapper}>
-      <Clipboard className={classes.clipboard} />
+      {icon}
       <Box mt={3}>
         <Typography>{text}</Typography>
       </Box>
