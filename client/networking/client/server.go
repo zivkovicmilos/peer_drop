@@ -49,13 +49,14 @@ type ClientServer struct {
 	pendingPeers            sync.Map             // peers awaiting verification. Only a single verification request is processed per user
 	pendingPeersSize        int64
 	kademliaDHT             *dht.IpfsDHT
-	pubSub                  *pubsub.PubSub                  // Reference to the pubsub service
-	pubsubSubscriptions     map[string]*pubsub.Subscription // In memory map of active subscriptions
-	pubsubTopics            map[string]*pubsub.Topic        // In memory map of active topics
-	workspaceDirectoryMap   map[string]string               // In memory map of workspace directories on disk (mnemonic -> dirName)
-	pubsubSubscriptionsStop map[string]chan struct{}        // Stop channel map
-	pubsubTopicsStop        map[string]chan struct{}        // Stop channel map
-	findPeersStop           map[string]chan struct{}        // Stop channel map
+	pubSub                  *pubsub.PubSub                         // Reference to the pubsub service
+	pubsubSubscriptions     map[string]*pubsub.Subscription        // In memory map of active subscriptions
+	pubsubTopics            map[string]*pubsub.Topic               // In memory map of active topics
+	workspaceDirectoryMap   map[string]string                      // In memory map of workspace directories on disk (mnemonic -> dirName)
+	pubsubSubscriptionsStop map[string]chan struct{}               // Stop channel map
+	pubsubTopicsStop        map[string]chan struct{}               // Stop channel map
+	findPeersStop           map[string]chan struct{}               // Stop channel map
+	downloadRequestMap      map[string]*proto.FileDownloadMetadata // Download request map
 
 	// File handling //
 	fileListerMap     map[string]*files.FileLister     // In memory map of file lister services (mnemonic -> fileLister)
@@ -76,6 +77,7 @@ type ClientServer struct {
 
 	// GRPC //
 	proto.UnimplementedVerificationServiceServer
+	proto.UnimplementedFileSharingServer
 
 	// challenge id -> join request
 	joinRequests map[string]*joinRequest // holds pending join requests TODO add garbage collector for stale requests
@@ -101,6 +103,7 @@ func NewClientServer(
 		fileListerMuxMap:      make(map[string]sync.RWMutex),
 		verifiedPeersMuxMap:   make(map[string]sync.RWMutex),
 		fileAggregatorMuxMap:  make(map[string]sync.RWMutex),
+		downloadRequestMap:    make(map[string]*proto.FileDownloadMetadata),
 
 		pubsubSubscriptionsStop: make(map[string]chan struct{}),
 		pubsubTopicsStop:        make(map[string]chan struct{}),
@@ -544,6 +547,8 @@ func (cs *ClientServer) startSubscriptionListener(mnemonic string) {
 			cs.logger.Error(fmt.Sprintf("Unmarshal error %v", err))
 			continue
 		}
+
+		cs.logger.Info(fmt.Sprintf("Files in message: [%d]", len(peerFileList.FileList)))
 
 		updateChannel <- files.FileListWrapper{
 			FileList: peerFileList,
@@ -993,8 +998,6 @@ func (cs *ClientServer) handleHandshake(
 	verificationRequest := &proto.VerificationRequest{}
 	verificationRequest.WorkspaceMnemonic = workspaceMnemonic
 
-	cs.logger.Info(fmt.Sprintf("CHALLENGE TYPE IS %s", workspaceInfo.SecurityType))
-	cs.printCredentials(credentials)
 	if workspaceInfo.SecurityType == "password" {
 		// Password challenge
 		if credentials.password == nil {
@@ -1071,7 +1074,17 @@ func (cs *ClientServer) setupProtocols() {
 		verificationProtocol.Handler()(stream)
 	})
 
-	// TODO set up the file transfer protocol
+	// Set up the file sharing protocol
+	fileSharingProtocol := NewGRPCProtocol()
+	proto.RegisterFileSharingServer(fileSharingProtocol.GrpcServer(), cs)
+	fileSharingProtocol.Serve()
+
+	cs.host.SetStreamHandler(protocol.ID(config.FileSharingProto), func(stream network.Stream) {
+		peerID := stream.Conn().RemotePeer()
+		cs.logger.Info(fmt.Sprintf("Open stream [protocol: %s], by peer %s", config.FileSharingProto, peerID))
+
+		fileSharingProtocol.Handler()(stream)
+	})
 
 	cs.logger.Info("GRPC protocols set")
 
@@ -1362,4 +1375,119 @@ func (cs *ClientServer) GetWorkspaceSaveDir(mnemonic string) (string, error) {
 	}
 
 	return directory, nil
+}
+
+// File Sharing //
+
+// RequestFile implements file download request handling
+func (cs *ClientServer) RequestFile(
+	context context.Context,
+	request *proto.FileRequest,
+) (*proto.FileDownloadMetadata, error) {
+	// Check if the contact is verified
+	typedContext := context.(*WrappedContext)
+	if !cs.isVerifiedPeer(typedContext.PeerID, request.Mnemonic) {
+		// Peer unverified
+		cs.logger.Error(fmt.Sprintf("Unverified peer requested file %s", typedContext.PeerID.Pretty()))
+
+		return nil, errors.New("unverified peer request")
+	}
+
+	// Check if we have the workspace mnemonic
+	mnemonic := request.Mnemonic
+	workspaceInfo, findErr := storage.GetStorageHandler().GetWorkspaceInfo(mnemonic)
+	if findErr != nil {
+		cs.logger.Error(fmt.Sprintf("Error when trying to find workspace %s", mnemonic))
+
+		return nil, fmt.Errorf("error when trying to find workspace %s", mnemonic)
+	}
+
+	if workspaceInfo == nil {
+		cs.logger.Error(fmt.Sprintf("Unable to find workspace %s", mnemonic))
+
+		return nil, fmt.Errorf("unable to find workspace %s", mnemonic)
+	}
+
+	// Check if we have the requested file
+	mux, _ := cs.fileListerMuxMap[mnemonic]
+	mux.RLock()
+	fileLister, ok := cs.fileListerMap[mnemonic]
+	if !ok {
+		mux.RUnlock()
+		cs.logger.Error(fmt.Sprintf("Unable to find file lister %s", mnemonic))
+
+		return nil, fmt.Errorf("unable to find file lister %s", mnemonic)
+	}
+	file, _ := fileLister.GetFileInfo(request.FileChecksum)
+	mux.RUnlock()
+	if file == nil {
+		cs.logger.Error(fmt.Sprintf("Unable to find file %s", request.FileChecksum))
+
+		return nil, fmt.Errorf("unable to find file %s", request.FileChecksum)
+	}
+
+	// Grab our own credentials for the workspace
+	credentials, credErr := storage.GetStorageHandler().GetWorkspaceCredentials(request.Mnemonic)
+	if credErr != nil {
+		cs.logger.Error(fmt.Sprintf("Unable to find credentails %s", request.Mnemonic))
+
+		return nil, fmt.Errorf("unable to find credentials %s", request.Mnemonic)
+	}
+
+	// Construct the metadata
+	securityType := workspaceInfo.SecurityType
+
+	var metadata *proto.FileDownloadMetadata
+	metadata = nil
+	if securityType == "password" {
+		passwordMetadata, constructErr := localCrypto.GeneratePasswordFileSharingMetadata(*credentials.Password)
+		if constructErr != nil {
+			cs.logger.Error(fmt.Sprintf("Unable to construct password metadata %v", constructErr))
+
+			return nil, fmt.Errorf("unable to construct password metadata %v", constructErr)
+		}
+
+		// Extract the relevant information
+		metadata = &proto.FileDownloadMetadata{
+			RequestId:    uuid.New().String(),
+			IV:           passwordMetadata.IV,
+			Salt:         passwordMetadata.Salt,
+			Mnemonic:     request.Mnemonic,
+			FileChecksum: request.FileChecksum,
+		}
+	} else {
+		if request.PublicKey == nil {
+			cs.logger.Error(fmt.Sprintf("Missing public key from request %s", request.FileChecksum))
+
+			return nil, fmt.Errorf("missing public key from request %s", request.FileChecksum)
+		}
+
+		keyMetadata, constructErr := localCrypto.GenerateKeyFileSharingMetadata(*request.PublicKey)
+		if constructErr != nil {
+			cs.logger.Error(fmt.Sprintf("Unable to construct public key metadata %v", constructErr))
+
+			return nil, fmt.Errorf("unable to construct public key metadata %v", constructErr)
+		}
+
+		// Extract the relevant information
+		metadata = &proto.FileDownloadMetadata{
+			RequestId:        uuid.New().String(),
+			IV:               keyMetadata.IV,
+			EncryptedAesKey:  keyMetadata.EncryptedAESKey,
+			EncryptedHmacKey: keyMetadata.EncryptedHMACKey,
+			Mnemonic:         request.Mnemonic,
+			FileChecksum:     request.FileChecksum,
+		}
+	}
+
+	// Save the pending request metadata
+	if metadata == nil {
+		cs.logger.Error("Unable to construct metadata")
+
+		return nil, errors.New("unable to construct metadata")
+	}
+
+	cs.downloadRequestMap[metadata.RequestId] = metadata
+
+	return metadata, nil
 }

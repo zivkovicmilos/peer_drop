@@ -74,6 +74,8 @@ const SingleWorkspace: FC<ISingleWorkspaceProps> = (props) => {
 
   // Set the peer number updater
   useEffect(() => {
+    fetchNumPeers();
+    
     const peerNumUpdater = setInterval(() => {
       fetchNumPeers();
     }, 3000);

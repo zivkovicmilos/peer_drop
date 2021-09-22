@@ -2,6 +2,13 @@ syntax = "proto3";
 
 option go_package = "/proto";
 
+import "google/protobuf/empty.proto";
+
+service FileSharing {
+  rpc RequestFile(FileRequest) returns (FileDownloadMetadata);
+  rpc DownloadFile(google.protobuf.Empty) returns (stream FileChunk);
+}
+
 // FileList represents an array of files
 message FileList {
   repeated File file_list = 1;
@@ -13,6 +20,43 @@ message File {
   string name = 1;
   string extension = 2;
   int64 size = 3;            // in bytes
-  int64 date_modified = 4;
-  string file_checksum = 5; // used to differentiate files with same name / extension
+  int64 date_modified = 4;   // unix
+  string file_checksum = 5;  // used to differentiate files with same name / extension
+}
+
+// FileRequest is the download request sent to the node
+// which has the file
+message FileRequest {
+  string mnemonic = 1;
+  string file_checksum = 2;
+
+  optional string public_key = 3; // the requesters public key
+}
+
+// FileDownloadMetadata contains metadata information
+// relating to the file download
+message FileDownloadMetadata {
+  bytes IV = 1;
+
+  // Password //
+  // Users can derive the AES / HMAC key using only the
+  // local password, and public IV / salt data
+  optional bytes salt = 2;
+
+  // Public Key //
+  // Users can decrypt the AES and HMAC key
+  // using their public key
+  optional bytes encrypted_aes_key = 3;
+  optional bytes encrypted_hmac_key = 4;
+
+  // Workspace information //
+  string mnemonic = 5;
+  string file_checksum = 6;
+
+  string request_id = 7;
+}
+
+// FileChunk is the encrypted file chunk that's downloaded
+message FileChunk {
+  bytes chunk = 1;
 }

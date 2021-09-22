@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/sha512"
 	"crypto/x509"
 	"encoding/hex"
 	"errors"
@@ -16,11 +17,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	libp2pCrypto "github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/zivkovicmilos/peer_drop/rest/types"
 	"golang.org/x/crypto/openpgp"
 	"golang.org/x/crypto/openpgp/armor"
 	"golang.org/x/crypto/openpgp/packet"
+	"golang.org/x/crypto/pbkdf2"
 )
 
 // ParseRsaPublicKeyFromPemStr parses a PEM formatted public key
@@ -209,7 +212,6 @@ func GenerateKeyPair(request types.GenerateKeyPairRequest) (string, error) {
 		return "", fmt.Errorf("unable to create entity, %v", entityError)
 	}
 
-
 	// Encode the initial armor
 	buf := new(bytes.Buffer)
 	w, encodeError := armor.Encode(buf, openpgp.PrivateKeyType, nil)
@@ -295,4 +297,142 @@ func rsaPrivToLibp2pPriv(key *rsa.PrivateKey) (libp2pCrypto.PrivKey, error) {
 func NewSHA256(data []byte) []byte {
 	hash := sha256.Sum256(data)
 	return hash[:]
+}
+
+type PasswordFileSharingMetadata struct {
+	IV   []byte
+	Salt []byte
+
+	AESKey  []byte
+	HMACKey []byte
+}
+
+type KeyFileSharingMetadata struct {
+	IV               []byte
+	EncryptedAESKey  []byte
+	EncryptedHMACKey []byte
+
+	AESKey  []byte
+	HMACKey []byte
+}
+
+const IV_SIZE int = 16   // B
+const SALT_SIZE int = 32 // B
+
+// generateIV generates a randomly filled IV
+func generateIV() ([]byte, error) {
+	iv := make([]byte, IV_SIZE)
+	_, err := rand.Read(iv)
+	if err != nil {
+		return nil, err
+	}
+
+	return iv, nil
+}
+
+// generateSalt generates a random salt
+func generateSalt() ([]byte, error) {
+	salt := make([]byte, SALT_SIZE)
+	_, err := rand.Read(salt)
+	if err != nil {
+		return nil, err
+	}
+
+	return salt, nil
+}
+
+// GeneratePasswordFileSharingMetadata generates the required metadata
+// for password based file sharing
+func GeneratePasswordFileSharingMetadata(password string) (*PasswordFileSharingMetadata, error) {
+	metadata := &PasswordFileSharingMetadata{}
+
+	// Generate IV
+	iv, ivErr := generateIV()
+	if ivErr != nil {
+		return nil, ivErr
+	}
+
+	// Generate salt
+	salt, saltErr := generateSalt()
+	if saltErr != nil {
+		return nil, saltErr
+	}
+
+	metadata.IV = iv
+	metadata.Salt = salt
+
+	// We need to generate a 512bit key for AES / HMAC
+	generatedKey := pbkdf2.Key([]byte(password), salt, 4096, 64, sha512.New)
+
+	// First half is for AES, second half is for HMAC
+	aesKey := generatedKey[:32]
+	hmacKey := generatedKey[32:]
+
+	metadata.AESKey = aesKey
+	metadata.HMACKey = hmacKey
+
+	return metadata, nil
+}
+
+// GenerateKeyFileSharingMetadata generates the required metadata
+// for public key based file sharing
+func GenerateKeyFileSharingMetadata(publicKeyPEM string) (*KeyFileSharingMetadata, error) {
+	metadata := &KeyFileSharingMetadata{}
+
+	// Generate IV
+	iv, ivErr := generateIV()
+	if ivErr != nil {
+		return nil, ivErr
+	}
+	metadata.IV = iv
+
+	salt, saltErr := generateSalt()
+	if saltErr != nil {
+		return nil, saltErr
+	}
+
+	// We need to generate a 512bit key for AES / HMAC
+	generatedKey := pbkdf2.Key([]byte(uuid.New().String()), salt, 4096, 64, sha512.New)
+
+	// First half is for AES, second half is for HMAC
+	aesKey := generatedKey[:32]
+	hmacKey := generatedKey[32:]
+
+	metadata.AESKey = aesKey
+	metadata.HMACKey = hmacKey
+
+	// Encrypt the keys
+	// Convert the public key PEM block to an rsa object
+	publicKey, parseErr := ParseRsaPublicKeyFromPemStr(publicKeyPEM)
+	if parseErr != nil {
+		return nil, parseErr
+	}
+
+	rsaPublicKey := publicKey.PublicKey.(*rsa.PublicKey)
+
+	// Encrypt the small messages using RSA
+	encryptedAES, err := rsa.EncryptOAEP(
+		sha256.New(),
+		rand.Reader,
+		rsaPublicKey,
+		aesKey,
+		nil)
+	if err != nil {
+		return nil, err
+	}
+
+	encryptedHMAC, err := rsa.EncryptOAEP(
+		sha256.New(),
+		rand.Reader,
+		rsaPublicKey,
+		hmacKey,
+		nil)
+	if err != nil {
+		return nil, err
+	}
+
+	metadata.EncryptedAESKey = encryptedAES
+	metadata.EncryptedHMACKey = encryptedHMAC
+
+	return metadata, nil
 }

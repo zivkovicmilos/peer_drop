@@ -56,17 +56,23 @@ func (fa *FileAggregator) Stop() {
 func (fa *FileAggregator) aggregateFilesLoop() {
 	for {
 		fileListWrapper, more := <-fa.updateChannel
+		fa.logger.Info("Message received")
 		if more {
+			fa.logger.Info("New file list received received")
 			// Parse the file list
 
 			// Find the differences
 			fa.fileArrayMux.Lock()
 			fileDifferences := fa.findFileDifference(fa.fileArray, fileListWrapper.FileList.FileList)
+			fa.logger.Debug(fmt.Sprintf("File differences found: %d", len(fileDifferences)))
+			fa.logger.Debug(fmt.Sprintf("Size of local records: %d", len(fa.fileArray)))
+
 			fa.fileArrayMux.Unlock()
 
 			// Update all the relevant structures
 			fa.pruneFileMap(fileDifferences, fileListWrapper.PeerID)
 		} else {
+			fa.logger.Info("Exit signal received")
 			// exit signal caught
 			return
 		}
@@ -86,6 +92,14 @@ func (fa *FileAggregator) findFileDifference(a, b []*proto.File) []*proto.File {
 			diff = append(diff, x)
 		}
 	}
+
+	// Edge case when the file array is empty
+	if len(a) == 0 {
+		for _, x := range b {
+			diff = append(diff, x)
+		}
+	}
+	
 	return diff
 }
 
@@ -97,6 +111,7 @@ func (fa *FileAggregator) pruneFileMap(fileDifferences []*proto.File, peerID pee
 		// Check if the file mapping to peerID exists.
 		peerArray, ok := fa.fileMap[file.FileChecksum]
 		if !ok {
+			fa.logger.Debug(fmt.Sprintf("New file received: %s", file.Name))
 			// If it doesn't exist, that means the file was added
 			fa.addFileToFileArray(file)
 			newArray := make([]peer.ID, 0)
@@ -105,9 +120,11 @@ func (fa *FileAggregator) pruneFileMap(fileDifferences []*proto.File, peerID pee
 			fa.fileMap[file.FileChecksum] = newArray
 		} else {
 			// If it exists, that means the file was removed
+			fa.logger.Debug(fmt.Sprintf("File removed received: %s", file.Name))
 			newArray := fa.pruneFromPeerArray(peerArray, peerID)
 			fa.fileMap[file.FileChecksum] = newArray
 			if len(newArray) == 0 {
+				fa.logger.Debug(fmt.Sprintf("File removed globally received: %s", file.Name))
 				// Remove the file from the global array as nobody serves it
 				fa.pruneFileFromFileArray(file)
 			}

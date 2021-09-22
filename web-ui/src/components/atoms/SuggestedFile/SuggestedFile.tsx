@@ -1,5 +1,6 @@
 import { Box, Typography } from '@material-ui/core';
 import { makeStyles } from '@material-ui/core/styles';
+import clsx from 'clsx';
 import { FC } from 'react';
 import FileIcon, { IconStyle } from 'react-fileicons';
 import ColorUtils from '../../../shared/utils/ColorUtils';
@@ -19,8 +20,14 @@ const SuggestedFile: FC<ISuggestedFileProps> = (props) => {
         background: colorCode.backgroundGradient
       }}
     >
-      <Box display={'flex'} flexDirection={'column'} alignItems={'center'}>
-        <Box mb={1}>
+      <Box
+        display={'flex'}
+        flexDirection={'column'}
+        width={'80%'}
+        className={'truncate'}
+      >
+        <Box mb={1} display={'flex'} alignItems={'center'} justifyContent={'center'}>
+
           <FileIcon
             extension={file.extension}
             background={'transparent'}
@@ -29,9 +36,9 @@ const SuggestedFile: FC<ISuggestedFileProps> = (props) => {
             size={45}
           />
         </Box>
-        <Typography
-          className={classes.fileName}
-        >{`${file.name}.${file.extension}`}</Typography>
+          <Typography
+            className={clsx('truncate', classes.fileName)}
+          >{`${file.name}.${file.extension}`}</Typography>
       </Box>
     </Box>
   );
@@ -51,7 +58,8 @@ const useStyles = makeStyles(() => {
       cursor: 'pointer',
       '&:hover': {
         boxShadow: theme.palette.boxShadows.darker
-      }
+      },
+      wordWrap: 'break-word'
     },
     fileName: {
       fontWeight: 500,

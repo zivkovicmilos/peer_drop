@@ -175,7 +175,7 @@ const ViewWorkspaceFiles: FC<IViewWorkspaceFilesProps> = (props) => {
                     className={clsx(classes.noBorder, classes.tableCell)}
                     align="center"
                   >
-                    {moment(row.dateModified).format('DD.MM.YYYY.')}
+                    {moment.unix(row.dateModified).format('DD.MM.YYYY.')}
                   </TableCell>
                   <TableCell
                     className={clsx(classes.noBorder, classes.tableCell)}
