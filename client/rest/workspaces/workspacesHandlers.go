@@ -395,3 +395,29 @@ func AddFileToWorkspace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
+func DownloadWorkspaceFile(w http.ResponseWriter, r *http.Request) {
+	var downloadFileRequest types.FileDownloadRequest
+
+	decodeErr := json.NewDecoder(r.Body).Decode(&downloadFileRequest)
+	if decodeErr != nil {
+		http.Error(w, "Unable to parse input", http.StatusBadRequest)
+		return
+	}
+
+	clientServer := servicehandler.GetServiceHandler().GetClientServer()
+	downloadErr := clientServer.HandleFileDownload( // TODO return file
+		downloadFileRequest.WorkspaceMnemonic,
+		downloadFileRequest.FileChecksum,
+	)
+
+	if downloadErr != nil {
+		http.Error(w, "Unable to download file", http.StatusInternalServerError)
+		return
+	}
+
+	if encodeErr := json.NewEncoder(w).Encode("Workspace file downloaded!"); encodeErr != nil {
+		http.Error(w, "Unable to encode response", http.StatusInternalServerError)
+		return
+	}
+}

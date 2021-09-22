@@ -341,6 +341,28 @@ func generateSalt() ([]byte, error) {
 	return salt, nil
 }
 
+// fileSharingSolution is a wrapper for calculated key values
+type fileSharingSolution struct {
+	AESKey  []byte
+	HMACKey []byte
+}
+
+// GeneratePasswordFileSharingSolution generates the required
+// aes / hmac values based on the password, salt and IV
+func GeneratePasswordFileSharingSolution(password string, salt []byte) *fileSharingSolution {
+	// We need to generate a 512bit key for AES / HMAC
+	generatedKey := pbkdf2.Key([]byte(password), salt, 4096, 64, sha512.New)
+
+	// First half is for AES, second half is for HMAC
+	aesKey := generatedKey[:32]
+	hmacKey := generatedKey[32:]
+
+	return &fileSharingSolution{
+		AESKey:  aesKey,
+		HMACKey: hmacKey,
+	}
+}
+
 // GeneratePasswordFileSharingMetadata generates the required metadata
 // for password based file sharing
 func GeneratePasswordFileSharingMetadata(password string) (*PasswordFileSharingMetadata, error) {
@@ -372,6 +394,50 @@ func GeneratePasswordFileSharingMetadata(password string) (*PasswordFileSharingM
 	metadata.HMACKey = hmacKey
 
 	return metadata, nil
+}
+
+// GenerateKeyFileSharingSolution decrypts the
+// aes / hmac keys using the private key
+func GenerateKeyFileSharingSolution(
+	privateKeyPEM string,
+	aesEncrypted []byte,
+	hmacEncrypted []byte,
+) (*fileSharingSolution, error) {
+	privateKey, parseErr := ParsePrivateKeyFromPemStr(privateKeyPEM)
+	if parseErr != nil {
+		return nil, parseErr
+	}
+
+	rsaPrivateKey := privateKey.PrivateKey.(*rsa.PrivateKey)
+
+	// AES
+	decryptedAES, err := rsa.DecryptOAEP(
+		sha256.New(),
+		rand.Reader,
+		rsaPrivateKey,
+		aesEncrypted,
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// HMAC
+	decryptedHMAC, err := rsa.DecryptOAEP(
+		sha256.New(),
+		rand.Reader,
+		rsaPrivateKey,
+		hmacEncrypted,
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &fileSharingSolution{
+		AESKey:  decryptedAES,
+		HMACKey: decryptedHMAC,
+	}, nil
 }
 
 // GenerateKeyFileSharingMetadata generates the required metadata

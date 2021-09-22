@@ -66,3 +66,8 @@ export interface IWorkspaceDetailedFileResponse {
 export interface IWorkspaceNumPeersResponse {
   numPeers: number;
 }
+
+export interface IDownloadFileRequest {
+  workspaceMnemonic: string;
+  fileChecksum: string;
+}

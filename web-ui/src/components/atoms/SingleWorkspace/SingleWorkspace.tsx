@@ -5,6 +5,7 @@ import { useHistory } from 'react-router-dom';
 import WorkspacesService from '../../../services/workspaces/workspacesService';
 import greenCircle from '../../../shared/assets/img/workspace_green.png';
 import redCircle from '../../../shared/assets/img/workspace_red.png';
+import CommonUtils from '../../../shared/utils/CommonUtils';
 import theme from '../../../theme/theme';
 import useSnackbar from '../../molecules/Snackbar/useSnackbar.hook';
 import { ISingleWorkspaceProps } from './singleWorkspace.types';
@@ -60,7 +61,9 @@ const SingleWorkspace: FC<ISingleWorkspaceProps> = (props) => {
 
   const fetchNumPeers = () => {
     const fetchPeers = async () => {
-      return await WorkspacesService.getWorkspacePeers(mnemonic);
+      return await WorkspacesService.getWorkspacePeers(
+        CommonUtils.formatMnemonic(mnemonic)
+      );
     };
 
     fetchPeers()
@@ -75,7 +78,7 @@ const SingleWorkspace: FC<ISingleWorkspaceProps> = (props) => {
   // Set the peer number updater
   useEffect(() => {
     fetchNumPeers();
-    
+
     const peerNumUpdater = setInterval(() => {
       fetchNumPeers();
     }, 3000);
@@ -104,7 +107,7 @@ const SingleWorkspace: FC<ISingleWorkspaceProps> = (props) => {
 
   const history = useHistory();
   const handleWorkspaceClick = () => {
-    history.push('/workspaces/view/' + mnemonic);
+    history.push('/workspaces/view/' + CommonUtils.formatMnemonic(mnemonic));
   };
 
   return (

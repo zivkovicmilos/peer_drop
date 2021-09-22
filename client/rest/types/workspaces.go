@@ -61,3 +61,8 @@ type FileInfo struct {
 type WorkspacePeersResponse struct {
 	NumPeers int `json:"numPeers"`
 }
+
+type FileDownloadRequest struct {
+	FileChecksum      string `json:"fileChecksum"`
+	WorkspaceMnemonic string `json:"workspaceMnemonic"`
+}

@@ -7,7 +7,6 @@ import (
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
-	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -20,7 +19,7 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type FileSharingClient interface {
 	RequestFile(ctx context.Context, in *FileRequest, opts ...grpc.CallOption) (*FileDownloadMetadata, error)
-	DownloadFile(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (FileSharing_DownloadFileClient, error)
+	DownloadFile(ctx context.Context, in *FileRequestID, opts ...grpc.CallOption) (FileSharing_DownloadFileClient, error)
 }
 
 type fileSharingClient struct {
@@ -40,7 +39,7 @@ func (c *fileSharingClient) RequestFile(ctx context.Context, in *FileRequest, op
 	return out, nil
 }
 
-func (c *fileSharingClient) DownloadFile(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (FileSharing_DownloadFileClient, error) {
+func (c *fileSharingClient) DownloadFile(ctx context.Context, in *FileRequestID, opts ...grpc.CallOption) (FileSharing_DownloadFileClient, error) {
 	stream, err := c.cc.NewStream(ctx, &FileSharing_ServiceDesc.Streams[0], "/FileSharing/DownloadFile", opts...)
 	if err != nil {
 		return nil, err
@@ -77,7 +76,7 @@ func (x *fileSharingDownloadFileClient) Recv() (*FileChunk, error) {
 // for forward compatibility
 type FileSharingServer interface {
 	RequestFile(context.Context, *FileRequest) (*FileDownloadMetadata, error)
-	DownloadFile(*emptypb.Empty, FileSharing_DownloadFileServer) error
+	DownloadFile(*FileRequestID, FileSharing_DownloadFileServer) error
 	mustEmbedUnimplementedFileSharingServer()
 }
 
@@ -88,7 +87,7 @@ type UnimplementedFileSharingServer struct {
 func (UnimplementedFileSharingServer) RequestFile(context.Context, *FileRequest) (*FileDownloadMetadata, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RequestFile not implemented")
 }
-func (UnimplementedFileSharingServer) DownloadFile(*emptypb.Empty, FileSharing_DownloadFileServer) error {
+func (UnimplementedFileSharingServer) DownloadFile(*FileRequestID, FileSharing_DownloadFileServer) error {
 	return status.Errorf(codes.Unimplemented, "method DownloadFile not implemented")
 }
 func (UnimplementedFileSharingServer) mustEmbedUnimplementedFileSharingServer() {}
@@ -123,7 +122,7 @@ func _FileSharing_RequestFile_Handler(srv interface{}, ctx context.Context, dec 
 }
 
 func _FileSharing_DownloadFile_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(emptypb.Empty)
+	m := new(FileRequestID)
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}

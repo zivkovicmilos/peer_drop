@@ -16,6 +16,7 @@ import clsx from 'clsx';
 import moment from 'moment';
 import { FC, useEffect, useState } from 'react';
 import FileIcon, { IconStyle } from 'react-fileicons';
+import WorkspacesService from '../../../services/workspaces/workspacesService';
 import { IWorkspaceDetailedFileResponse } from '../../../services/workspaces/workspacesService.types';
 import folderIcon from '../../../shared/assets/img/folder.png';
 import ColorUtils from '../../../shared/utils/ColorUtils';
@@ -68,6 +69,20 @@ const ViewWorkspaceFiles: FC<IViewWorkspaceFilesProps> = (props) => {
   const classes = useStyles();
 
   const handleDownload = (checksum: string) => {
+    const downloadFile = async () => {
+      return await WorkspacesService.downloadFile({
+        workspaceMnemonic: workspaceInfo.workspaceMnemonic,
+        fileChecksum: checksum
+      });
+    };
+
+    downloadFile()
+      .then((response) => {
+        openSnackbar('File successfully downloaded', 'success');
+      })
+      .catch((err) => {
+        openSnackbar('Unable to download file', 'error');
+      });
   };
 
   const renderActions = (checksum: string) => {
@@ -116,7 +131,7 @@ const ViewWorkspaceFiles: FC<IViewWorkspaceFilesProps> = (props) => {
   };
 
   const renderItemName = (name: string, extension: string) => {
-    return `${name}.${extension}`;
+    return `${name}${extension}`;
   };
 
   if (shownFiles && count > 0) {

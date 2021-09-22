@@ -42,6 +42,16 @@ func NewFileAggregator(
 	}
 }
 
+// GetFilePeers fetches all peers who serve a specific file
+func (fa *FileAggregator) GetFilePeers(fileChecksum string) []peer.ID {
+	peers, ok := fa.fileMap[fileChecksum]
+	if !ok {
+		return []peer.ID{}
+	}
+
+	return peers
+}
+
 // Start starts the File aggregator loop
 func (fa *FileAggregator) Start() {
 	go fa.aggregateFilesLoop()
@@ -63,7 +73,9 @@ func (fa *FileAggregator) aggregateFilesLoop() {
 
 			// Find the differences
 			fa.fileArrayMux.Lock()
-			fileDifferences := fa.findFileDifference(fa.fileArray, fileListWrapper.FileList.FileList)
+			fileDifferencesAB := fa.findFileDifference(fa.fileArray, fileListWrapper.FileList.FileList)
+			fileDifferencesBA := fa.findFileDifference(fileListWrapper.FileList.FileList, fa.fileArray)
+			fileDifferences := append(fileDifferencesBA, fileDifferencesAB...)
 			fa.logger.Debug(fmt.Sprintf("File differences found: %d", len(fileDifferences)))
 			fa.logger.Debug(fmt.Sprintf("Size of local records: %d", len(fa.fileArray)))
 
@@ -81,6 +93,7 @@ func (fa *FileAggregator) aggregateFilesLoop() {
 
 // findFileDifference finds which files are different between the arrays
 func (fa *FileAggregator) findFileDifference(a, b []*proto.File) []*proto.File {
+	// Make a list of all new files
 	mb := make(map[string]struct{}, len(b))
 	for _, x := range b {
 		mb[x.FileChecksum] = struct{}{}
@@ -93,13 +106,6 @@ func (fa *FileAggregator) findFileDifference(a, b []*proto.File) []*proto.File {
 		}
 	}
 
-	// Edge case when the file array is empty
-	if len(a) == 0 {
-		for _, x := range b {
-			diff = append(diff, x)
-		}
-	}
-	
 	return diff
 }
 
@@ -110,6 +116,8 @@ func (fa *FileAggregator) pruneFileMap(fileDifferences []*proto.File, peerID pee
 		mux.Lock()
 		// Check if the file mapping to peerID exists.
 		peerArray, ok := fa.fileMap[file.FileChecksum]
+
+		fa.logger.Debug(fmt.Sprintf("%v %v", peerArray, ok))
 		if !ok {
 			fa.logger.Debug(fmt.Sprintf("New file received: %s", file.Name))
 			// If it doesn't exist, that means the file was added
@@ -120,7 +128,7 @@ func (fa *FileAggregator) pruneFileMap(fileDifferences []*proto.File, peerID pee
 			fa.fileMap[file.FileChecksum] = newArray
 		} else {
 			// If it exists, that means the file was removed
-			fa.logger.Debug(fmt.Sprintf("File removed received: %s", file.Name))
+			fa.logger.Debug(fmt.Sprintf("File removed: %s", file.Name))
 			newArray := fa.pruneFromPeerArray(peerArray, peerID)
 			fa.fileMap[file.FileChecksum] = newArray
 			if len(newArray) == 0 {

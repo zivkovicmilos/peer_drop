@@ -9,6 +9,7 @@ import WorkspacesService from '../../../services/workspaces/workspacesService';
 import { IWorkspaceDetailedResponse } from '../../../services/workspaces/workspacesService.types';
 import { ReactComponent as UploadIcon } from '../../../shared/assets/icons/file_upload_black_24dp.svg';
 import { ReactComponent as Loupe } from '../../../shared/assets/icons/loupe.svg';
+import CommonUtils from '../../../shared/utils/CommonUtils';
 import theme from '../../../theme/theme';
 import Link from '../../atoms/Link/Link';
 import LoadingIndicator from '../../atoms/LoadingIndicator/LoadingIndicator';
@@ -32,7 +33,9 @@ const ViewWorkspace: FC<IViewWorkspaceProps> = () => {
 
   const fetchWorkspaceDetailed = () => {
     const fetchDetailed = async () => {
-      return await WorkspacesService.getWorkspaceFiles(workspaceMnemonic);
+      return await WorkspacesService.getWorkspaceFiles(
+        CommonUtils.formatMnemonic(workspaceMnemonic)
+      );
     };
 
     fetchDetailed()
@@ -73,7 +76,10 @@ const ViewWorkspace: FC<IViewWorkspaceProps> = () => {
   const renderSuggestedFiles = () => {
     if (workspaceDetailed && workspaceDetailed.workspaceFiles.length > 0) {
       return (
-        <SuggestedList files={workspaceDetailed.workspaceFiles.slice(0, 5)} />
+        <SuggestedList
+          files={workspaceDetailed.workspaceFiles.slice(0, 5)}
+          workspaceMnemonic={workspaceMnemonic}
+        />
       );
     }
 

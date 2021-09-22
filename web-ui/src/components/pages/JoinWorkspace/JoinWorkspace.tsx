@@ -14,6 +14,7 @@ import SessionContext from '../../../context/SessionContext';
 import WorkspacesService from '../../../services/workspaces/workspacesService';
 import { IWorkspaceInfoResponse } from '../../../services/workspaces/workspacesService.types';
 import { joinWorkspaceSchema } from '../../../shared/schemas/workspaceSchemas';
+import CommonUtils from '../../../shared/utils/CommonUtils';
 import theme from '../../../theme/theme';
 import ActionButton from '../../atoms/ActionButton/ActionButton';
 import FormTitle from '../../atoms/FormTitle/FormTitle';
@@ -57,7 +58,7 @@ const JoinWorkspace: FC<IJoinWorkspaceProps> = () => {
     onSubmit: (values, { resetForm }) => {
       const fetchWorkspaceInfo = async () => {
         return await WorkspacesService.getWorkspaceInfo(
-          values.workspaceMnemonic
+          CommonUtils.formatMnemonic(values.workspaceMnemonic)
         );
       };
 

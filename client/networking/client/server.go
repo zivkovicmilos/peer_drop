@@ -3,9 +3,14 @@ package client
 import (
 	"bytes"
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -49,14 +54,14 @@ type ClientServer struct {
 	pendingPeers            sync.Map             // peers awaiting verification. Only a single verification request is processed per user
 	pendingPeersSize        int64
 	kademliaDHT             *dht.IpfsDHT
-	pubSub                  *pubsub.PubSub                         // Reference to the pubsub service
-	pubsubSubscriptions     map[string]*pubsub.Subscription        // In memory map of active subscriptions
-	pubsubTopics            map[string]*pubsub.Topic               // In memory map of active topics
-	workspaceDirectoryMap   map[string]string                      // In memory map of workspace directories on disk (mnemonic -> dirName)
-	pubsubSubscriptionsStop map[string]chan struct{}               // Stop channel map
-	pubsubTopicsStop        map[string]chan struct{}               // Stop channel map
-	findPeersStop           map[string]chan struct{}               // Stop channel map
-	downloadRequestMap      map[string]*proto.FileDownloadMetadata // Download request map
+	pubSub                  *pubsub.PubSub                  // Reference to the pubsub service
+	pubsubSubscriptions     map[string]*pubsub.Subscription // In memory map of active subscriptions
+	pubsubTopics            map[string]*pubsub.Topic        // In memory map of active topics
+	workspaceDirectoryMap   map[string]string               // In memory map of workspace directories on disk (mnemonic -> dirName)
+	pubsubSubscriptionsStop map[string]chan struct{}        // Stop channel map
+	pubsubTopicsStop        map[string]chan struct{}        // Stop channel map
+	findPeersStop           map[string]chan struct{}        // Stop channel map
+	downloadRequestMap      map[string]fileMetadataWrapper  // Download request map
 
 	// File handling //
 	fileListerMap     map[string]*files.FileLister     // In memory map of file lister services (mnemonic -> fileLister)
@@ -103,7 +108,7 @@ func NewClientServer(
 		fileListerMuxMap:      make(map[string]sync.RWMutex),
 		verifiedPeersMuxMap:   make(map[string]sync.RWMutex),
 		fileAggregatorMuxMap:  make(map[string]sync.RWMutex),
-		downloadRequestMap:    make(map[string]*proto.FileDownloadMetadata),
+		downloadRequestMap:    make(map[string]fileMetadataWrapper),
 
 		pubsubSubscriptionsStop: make(map[string]chan struct{}),
 		pubsubTopicsStop:        make(map[string]chan struct{}),
@@ -414,6 +419,7 @@ func (cs *ClientServer) initializeWorkspaceDirectory(name string, mnemonic strin
 	dirName = strings.Replace(dirName, " ", "-", -1)
 
 	pathCommon := fmt.Sprintf("%s/%s/%s", cs.nodeConfig.BaseDir, config.DirectoryFiles, dirName)
+	cs.workspaceDirectoryMap[mnemonic] = pathCommon
 
 	// baseDir/files/workspace-mnemonic/temp
 	// Directory is used for temporary download data
@@ -428,7 +434,6 @@ func (cs *ClientServer) initializeWorkspaceDirectory(name string, mnemonic strin
 	if createErr := globalUtils.CreateDirectory(shareDirectory); createErr != nil {
 		return createErr
 	}
-	cs.workspaceDirectoryMap[mnemonic] = shareDirectory
 
 	// Start the file lister service for this directory
 	fileLister := files.NewFileLister(
@@ -606,7 +611,7 @@ func (cs *ClientServer) startTopicPublisher(mnemonic string) {
 					continue
 				}
 
-				cs.logger.Info("Workspace file list successfully published")
+				cs.logger.Info(fmt.Sprintf("Workspace file list successfully published [%d]", len(localFileList)))
 			}
 		}
 	}
@@ -1374,16 +1379,24 @@ func (cs *ClientServer) GetWorkspaceSaveDir(mnemonic string) (string, error) {
 		return "", fmt.Errorf("requesting directory for unknown mnemonic [%s]", mnemonic)
 	}
 
-	return directory, nil
+	return fmt.Sprintf("%s/%s", directory, config.DirectoryShare), nil
 }
 
 // File Sharing //
+
+type fileMetadataWrapper struct {
+	peerID       peer.ID
+	fileMetadata *proto.FileDownloadMetadata
+	aesKey       []byte
+	hmacKey      []byte
+}
 
 // RequestFile implements file download request handling
 func (cs *ClientServer) RequestFile(
 	context context.Context,
 	request *proto.FileRequest,
 ) (*proto.FileDownloadMetadata, error) {
+	cs.logger.Info(fmt.Sprintf("File requested: %s", request.FileChecksum))
 	// Check if the contact is verified
 	typedContext := context.(*WrappedContext)
 	if !cs.isVerifiedPeer(typedContext.PeerID, request.Mnemonic) {
@@ -1439,6 +1452,10 @@ func (cs *ClientServer) RequestFile(
 
 	var metadata *proto.FileDownloadMetadata
 	metadata = nil
+
+	var aesKey []byte
+	var hmacKey []byte
+
 	if securityType == "password" {
 		passwordMetadata, constructErr := localCrypto.GeneratePasswordFileSharingMetadata(*credentials.Password)
 		if constructErr != nil {
@@ -1447,6 +1464,9 @@ func (cs *ClientServer) RequestFile(
 			return nil, fmt.Errorf("unable to construct password metadata %v", constructErr)
 		}
 
+		aesKey = passwordMetadata.AESKey
+		hmacKey = passwordMetadata.HMACKey
+
 		// Extract the relevant information
 		metadata = &proto.FileDownloadMetadata{
 			RequestId:    uuid.New().String(),
@@ -1454,6 +1474,7 @@ func (cs *ClientServer) RequestFile(
 			Salt:         passwordMetadata.Salt,
 			Mnemonic:     request.Mnemonic,
 			FileChecksum: request.FileChecksum,
+			FileName:     fmt.Sprintf("%s%s", file.Name, file.Extension),
 		}
 	} else {
 		if request.PublicKey == nil {
@@ -1469,9 +1490,13 @@ func (cs *ClientServer) RequestFile(
 			return nil, fmt.Errorf("unable to construct public key metadata %v", constructErr)
 		}
 
+		aesKey = keyMetadata.AESKey
+		hmacKey = keyMetadata.HMACKey
+
 		// Extract the relevant information
 		metadata = &proto.FileDownloadMetadata{
 			RequestId:        uuid.New().String(),
+			FileName:         fmt.Sprintf("%s%s", file.Name, file.Extension),
 			IV:               keyMetadata.IV,
 			EncryptedAesKey:  keyMetadata.EncryptedAESKey,
 			EncryptedHmacKey: keyMetadata.EncryptedHMACKey,
@@ -1487,7 +1512,315 @@ func (cs *ClientServer) RequestFile(
 		return nil, errors.New("unable to construct metadata")
 	}
 
-	cs.downloadRequestMap[metadata.RequestId] = metadata
+	cs.downloadRequestMap[metadata.RequestId] = fileMetadataWrapper{
+		peerID:       typedContext.PeerID,
+		fileMetadata: metadata,
+		aesKey:       aesKey,
+		hmacKey:      hmacKey,
+	}
+
+	cs.logger.Info(fmt.Sprintf("File metadata sent: %s", request.FileChecksum))
 
 	return metadata, nil
+}
+
+const chunkSize = int64(64 * 1024) // 64 KiB
+
+// DownloadFile starts the file encryption and download process
+func (cs *ClientServer) DownloadFile(
+	requestIDWrapper *proto.FileRequestID,
+	server proto.FileSharing_DownloadFileServer,
+) error {
+	cs.logger.Info(fmt.Sprintf("Download requested: %s", requestIDWrapper.ID))
+
+	// Check if the request is valid
+	metadata, requestFound := cs.downloadRequestMap[requestIDWrapper.ID]
+	if !requestFound {
+		cs.logger.Error("Unknown request")
+
+		return errors.New("unknown request")
+	}
+
+	mux, _ := cs.fileListerMuxMap[metadata.fileMetadata.Mnemonic]
+	mux.RLock()
+	fileLister := cs.fileListerMap[metadata.fileMetadata.Mnemonic]
+	fileInfo, _ := fileLister.GetFileInfo(metadata.fileMetadata.FileChecksum)
+	mux.RUnlock()
+
+	if fileInfo == nil {
+		cs.logger.Error("Unknown file requested")
+
+		return errors.New("unknown file requested")
+	}
+
+	filePath := fmt.Sprintf("%s/%s%s", fileLister.GetBaseDir(), fileInfo.Name, fileInfo.Extension)
+	inFile, err := os.Open(filePath)
+	if err != nil {
+		cs.logger.Error(fmt.Sprintf("Unable to open file, %v", err))
+		return err
+	}
+	defer inFile.Close()
+
+	aes, err := aes.NewCipher(metadata.aesKey)
+	if err != nil {
+		return err
+	}
+
+	ctr := cipher.NewCTR(aes, metadata.fileMetadata.IV)
+	hmac := hmac.New(sha256.New, metadata.hmacKey)
+
+	chunk := &proto.FileChunk{}
+	buf := make([]byte, chunkSize)
+	for {
+		n, err := inFile.Read(buf)
+		if err != nil && err != io.EOF {
+			cs.logger.Error("Unable to read file")
+			return err
+		}
+
+		outBuf := make([]byte, n)
+
+		ctr.XORKeyStream(outBuf, buf[:n])
+		chunk.Chunk = outBuf
+		hmac.Write(chunk.Chunk)
+
+		if err := server.Send(chunk); err != nil {
+			return err
+		}
+
+		if err == io.EOF {
+			break
+		}
+	}
+
+	// Include the IV in the HMAC
+	hmac.Write(metadata.fileMetadata.IV)
+
+	// Append the IV and the HMAC code to the end of the file stream
+	chunk.Chunk = append(metadata.fileMetadata.IV, hmac.Sum(nil)...)
+
+	if err := server.Send(chunk); err != nil {
+		return err
+	}
+
+	cs.logger.Info(fmt.Sprintf("File sent: %s", requestIDWrapper.ID))
+
+	return nil
+}
+
+// HandleFileDownload handles file downloads from a remote peer
+func (cs *ClientServer) HandleFileDownload(
+	mnemonic string,
+	fileChecksum string,
+) error {
+	start := time.Now()
+	// Set the download directory
+	baseDir, _ := cs.workspaceDirectoryMap[mnemonic]
+	filePath := fmt.Sprintf("%s/%s", baseDir, config.DirectoryTemp)
+
+	// Get workspace info
+	workspaceInfo, findErr := storage.GetStorageHandler().GetWorkspaceInfo(mnemonic)
+	if findErr != nil {
+		return findErr
+	}
+	if workspaceInfo == nil {
+		return errors.New("unknown workspace requested")
+	}
+
+	// Get workspace credentials
+	credentials, credErr := storage.GetStorageHandler().GetWorkspaceCredentials(mnemonic)
+	if credErr != nil {
+		return credErr
+	}
+
+	if credentials == nil {
+		return errors.New("unknown credentials")
+	}
+
+	mux, _ := cs.fileAggregatorMuxMap[mnemonic]
+	mux.RLock()
+	peers := cs.fileAggregatorMap[mnemonic].GetFilePeers(fileChecksum)
+	mux.RUnlock()
+
+	if len(peers) < 0 {
+		return errors.New("no peers")
+	}
+
+	var stream network.Stream
+	stream = nil
+	for _, peerID := range peers {
+		foundStream, err := cs.host.NewStream(cs.ctx, peerID, protocol.ID(config.FileSharingProto))
+		if err != nil {
+			continue
+		}
+
+		stream = foundStream
+		break
+	}
+	if stream == nil {
+		return errors.New("unable to find available stream")
+	}
+
+	defer func(stream network.Stream) {
+		if streamCloseErr := stream.Close(); streamCloseErr != nil {
+			cs.logger.Error(fmt.Sprintf("Unable to gracefully close stream, %v", streamCloseErr))
+		}
+	}(stream)
+
+	// Grab the wrapped connection
+	clientConn := WrapStreamInClient(stream)
+
+	// Instantiate the proto client
+	clientProto := proto.NewFileSharingClient(clientConn.(*grpc.ClientConn))
+
+	// File request
+	fileMetadata, requestErr := clientProto.RequestFile(context.Background(), &proto.FileRequest{
+		Mnemonic:     mnemonic,
+		FileChecksum: fileChecksum,
+		PublicKey:    nil,
+	})
+	if requestErr != nil {
+		cs.logger.Error(fmt.Sprintf("Unable to request file, %v", requestErr))
+
+		return requestErr
+	}
+
+	// Figure out the AES / HMAC keys
+	var aesKey []byte
+	var hmacKey []byte
+
+	if workspaceInfo.SecurityType == "password" {
+		// Generate the data
+		if credentials.Password == nil {
+			return errors.New("no password for solution")
+		}
+		if fileMetadata.Salt == nil {
+			return errors.New("bad request - missing salt")
+		}
+
+		solution := localCrypto.GeneratePasswordFileSharingSolution(
+			*credentials.Password,
+			fileMetadata.Salt,
+		)
+
+		aesKey = solution.AESKey
+		hmacKey = solution.HMACKey
+	} else {
+		// Decrypt the data
+		if credentials.PrivateKey == nil {
+			return errors.New("no private key for solution")
+		}
+
+		if fileMetadata.EncryptedAesKey == nil {
+			return errors.New("bad request - missing aes key")
+		}
+
+		if fileMetadata.EncryptedHmacKey == nil {
+			return errors.New("bad request - missing hmac key")
+		}
+
+		solution, solErr := localCrypto.GenerateKeyFileSharingSolution(
+			*credentials.PrivateKey,
+			fileMetadata.EncryptedAesKey,
+			fileMetadata.EncryptedHmacKey,
+		)
+		if solErr != nil {
+			return errors.New(fmt.Sprintf("unable to find solution, %v", solErr))
+		}
+
+		aesKey = solution.AESKey
+		hmacKey = solution.HMACKey
+	}
+
+	aes, err := aes.NewCipher(aesKey)
+	if err != nil {
+		return err
+	}
+
+	ctr := cipher.NewCTR(aes, fileMetadata.IV)
+	hmac := hmac.New(sha256.New, hmacKey)
+
+	fileDownload, downloadErr := clientProto.DownloadFile(context.Background(), &proto.FileRequestID{
+		ID: fileMetadata.RequestId,
+	})
+	if downloadErr != nil {
+		cs.logger.Error(fmt.Sprintf("Unable to download file, %v", requestErr))
+
+		return requestErr
+	}
+
+	// Start the download
+	var finalFileData []byte
+	var lastChunk []byte
+	lastChunk = nil
+	for {
+		chunk, err := fileDownload.Recv()
+		if err != nil {
+			if err == io.EOF {
+				cs.logger.Info("File transfer complete")
+				break
+			}
+			cs.logger.Error("Error with file download")
+
+			return err
+		}
+		if lastChunk != nil {
+			hmac.Write(lastChunk)
+		}
+
+		outBuf := make([]byte, len(chunk.Chunk))
+		ctr.XORKeyStream(outBuf, chunk.Chunk)
+		finalFileData = append(finalFileData, outBuf...)
+
+		lastChunk = chunk.Chunk
+	}
+
+	hmac.Write(fileMetadata.IV)
+	calculatedHMAC := hmac.Sum(nil)
+
+	// Extract the IV and HMAC
+	ivSize := len(fileMetadata.IV)
+	extractedIV := lastChunk[:ivSize]
+	extractedHMAC := lastChunk[ivSize:]
+
+	// Compare the IV
+	if bytes.Compare(extractedIV, fileMetadata.IV) != 0 {
+		cs.logger.Error("IV doesn't match")
+
+		cs.logger.Debug(fmt.Sprintf("Expected %v found %v", fileMetadata.IV, extractedIV))
+
+		return errors.New("IV doesn't match")
+	}
+
+	// Compare the HMAC
+	if bytes.Compare(extractedHMAC, calculatedHMAC) != 0 {
+		cs.logger.Error("HMAC doesn't match")
+
+		cs.logger.Debug(fmt.Sprintf("Expected %v found %v", calculatedHMAC, extractedHMAC))
+
+		return errors.New("HMAC doesn't match")
+	}
+
+	// Write data to disk
+	saveFile, createErr := os.Create(
+		fmt.Sprintf("%s/%s", filePath, fileMetadata.FileName),
+	)
+	if createErr != nil {
+		cs.logger.Error(fmt.Sprintf("Unable to create placeholder file, %v", createErr))
+
+		return requestErr
+	}
+	defer saveFile.Close()
+
+	// write this byte array to the created file
+	_, writeErr := saveFile.Write(
+		finalFileData[:len(finalFileData)-len(lastChunk)],
+	)
+	if writeErr != nil {
+		return errors.New("unable to write final file data")
+	}
+
+	elapsed := time.Since(start)
+	cs.logger.Info(fmt.Sprintf("Downloaded file %s in %s", fileMetadata.FileName, elapsed))
+	return nil
 }

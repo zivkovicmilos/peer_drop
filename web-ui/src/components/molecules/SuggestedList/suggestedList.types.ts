@@ -2,6 +2,7 @@ import { IWorkspaceDetailedFileResponse } from '../../../services/workspaces/wor
 
 export interface ISuggestedListProps {
   files: IWorkspaceDetailedFileResponse[];
+  workspaceMnemonic: string;
 }
 
 export interface IFileInfo {

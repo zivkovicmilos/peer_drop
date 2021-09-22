@@ -52,6 +52,36 @@ func (fl *FileLister) Start() {
 	go fl.sweepDirectoryLoop()
 }
 
+// GetBaseDir gets the base directory
+func (fl *FileLister) GetBaseDir() string {
+	return fl.baseDir
+}
+
+func (fl *FileLister) pruneRemovedFiles(currentFiles []*proto.File) {
+	fl.fileMapMux.RLock()
+
+	fileMap := make(map[string]int)
+
+	for _, file := range fl.fileMap {
+		fileMap[file.FileChecksum]++
+	}
+
+	fl.fileMapMux.RUnlock()
+
+	// Go through all current files
+	for _, currentFile := range currentFiles {
+		fileMap[currentFile.FileChecksum]--
+	}
+
+	// Prune removed files
+
+	for prunedChecksum, pruned := range fileMap {
+		if pruned > 0 {
+			fl.removeFile(prunedChecksum)
+		}
+	}
+}
+
 // sweepDirectory goes over all the files in the sharing directory
 // and updates the file map
 func (fl *FileLister) sweepDirectory() {
@@ -77,40 +107,44 @@ func (fl *FileLister) sweepDirectory() {
 		return
 	}
 
+	currentFiles := make([]*proto.File, 0)
 	// Construct the directory files
 	for _, f := range directoryFiles {
 		if !f.IsDir() {
 			wg.Add(1)
 
-			go func() {
-				defer wg.Done()
+			filePath := filepath.Join(fl.baseDir, f.Name())
+			checksum, checksumErr := fl.checksumFile(filePath)
+			if checksumErr != nil {
+				fl.logger.Error(fmt.Sprintf("Unable to checksum file %s", filePath))
+			}
 
-				filePath := filepath.Join(fl.baseDir, f.Name())
-				checksum, checksumErr := fl.checksumFile(filePath)
-				if checksumErr != nil {
-					fl.logger.Error(fmt.Sprintf("Unable to checksum file %s", filePath))
-				}
+			protoFile := fileInfoToFileProto(f)
+			protoFile.FileChecksum = checksum
 
-				protoFile := fileInfoToFileProto(f)
-				protoFile.FileChecksum = checksum
+			fl.addFile(protoFile, checksum)
+			currentFiles = append(currentFiles, protoFile)
+			filesFound.Inc()
 
-				go fl.addFile(protoFile, checksum)
-				filesFound.Inc()
-			}()
+			wg.Done()
 		}
 	}
 
+	fl.pruneRemovedFiles(currentFiles)
+
 	wg.Wait()
+}
+
+func fileNameWithoutExtension(fileName string) string {
+	return strings.TrimSuffix(fileName, filepath.Ext(fileName))
 }
 
 // fileInfoToFileProto converts the regular file information into proto format
 func fileInfoToFileProto(file fs.FileInfo) *proto.File {
 	protoFile := &proto.File{}
 
-	stringArr := strings.Split(file.Name(), ".")
-
-	protoFile.Name = stringArr[0]
-	protoFile.Extension = stringArr[1]
+	protoFile.Name = fileNameWithoutExtension(file.Name())
+	protoFile.Extension = filepath.Ext(file.Name())
 
 	protoFile.Size = file.Size()
 	protoFile.DateModified = file.ModTime().Unix()

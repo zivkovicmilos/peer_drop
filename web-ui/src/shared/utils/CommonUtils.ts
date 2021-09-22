@@ -61,4 +61,12 @@ export default class CommonUtils {
 
     return sortParams;
   };
+
+  static formatMnemonic(mnemonic: string): string {
+    return mnemonic.replace(/\s/g, '-');
+  }
+
+  static unformatMnemonic(mnemonic: string): string {
+    return mnemonic.replace(/-/g, ' ');
+  }
 }

@@ -4,12 +4,14 @@ import SuggestedFile from '../../atoms/SuggestedFile/SuggestedFile';
 import { ISuggestedListProps } from './suggestedList.types';
 
 const SuggestedList: FC<ISuggestedListProps> = (props) => {
-  const { files } = props;
+  const { files, workspaceMnemonic } = props;
 
   return (
-    <Box display={'flex'} width={'80%'} justifyContent={'space-between'}>
+    <Box display={'flex'} width={'80%'} ml={-4}>
       {files.map((file) => {
-        return <SuggestedFile file={file} />;
+        return (
+          <SuggestedFile file={file} workspaceMnemonic={workspaceMnemonic} />
+        );
       })}
     </Box>
   );

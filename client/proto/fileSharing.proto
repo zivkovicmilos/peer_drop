@@ -2,16 +2,18 @@ syntax = "proto3";
 
 option go_package = "/proto";
 
-import "google/protobuf/empty.proto";
-
 service FileSharing {
   rpc RequestFile(FileRequest) returns (FileDownloadMetadata);
-  rpc DownloadFile(google.protobuf.Empty) returns (stream FileChunk);
+  rpc DownloadFile(FileRequestID) returns (stream FileChunk);
 }
 
 // FileList represents an array of files
 message FileList {
   repeated File file_list = 1;
+}
+
+message FileRequestID {
+  string ID = 1;
 }
 
 // File is the representation of a local file on a
@@ -52,8 +54,9 @@ message FileDownloadMetadata {
   // Workspace information //
   string mnemonic = 5;
   string file_checksum = 6;
+  string file_name = 7;
 
-  string request_id = 7;
+  string request_id = 8;
 }
 
 // FileChunk is the encrypted file chunk that's downloaded

@@ -1,6 +1,7 @@
 import { RestService } from '../rest/restService';
 import { IPagination } from '../rest/restService.types';
 import {
+  IDownloadFileRequest,
   IJoinWorkspaceRequest,
   INewWorkspaceRequest,
   INewWorkspaceResponse,
@@ -17,6 +18,22 @@ class WorkspacesService {
     try {
       return await RestService.post<INewWorkspaceResponse>({
         url: `workspaces`,
+        data: {
+          ...request
+        }
+      });
+    } catch (err) {
+      console.warn(err);
+      throw err;
+    }
+  }
+
+  public static async downloadFile(
+    request: IDownloadFileRequest
+  ): Promise<string> {
+    try {
+      return await RestService.post<string>({
+        url: `workspaces/download`,
         data: {
           ...request
         }
@@ -60,7 +77,7 @@ class WorkspacesService {
   ): Promise<IWorkspaceInfoResponse> {
     try {
       return await RestService.get<IWorkspaceInfoResponse>({
-        url: `workspaces/${mnemonic.replace(/\s/g, '-')}`
+        url: `workspaces/${mnemonic}`
       });
     } catch (err) {
       console.warn(err);
@@ -86,7 +103,7 @@ class WorkspacesService {
   ): Promise<IWorkspaceDetailedResponse> {
     try {
       return await RestService.get<IWorkspaceDetailedResponse>({
-        url: `workspaces/${mnemonic.replace(/\s/g, '-')}/files`
+        url: `workspaces/${mnemonic}/files`
       });
     } catch (err) {
       console.warn(err);
@@ -99,7 +116,7 @@ class WorkspacesService {
   ): Promise<IWorkspaceNumPeersResponse> {
     try {
       return await RestService.get<IWorkspaceNumPeersResponse>({
-        url: `workspaces/${mnemonic.replace(/\s/g, '-')}/peers`
+        url: `workspaces/${mnemonic}/peers`
       });
     } catch (err) {
       console.warn(err);
