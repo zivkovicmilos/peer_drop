@@ -434,9 +434,34 @@ func (sh *StorageHandler) CreateIdentity(identity types.Identity) error {
 	return nil
 }
 
+// passPrimaryIdentity passes the primary identity to the first one found
+func (sh *StorageHandler) passPrimaryIdentity() {
+	// Find the first next identity since it must exist
+	keyBase := append(IDENTITIES, delimiter...)
+	iter := sh.db.NewIterator(util.BytesPrefix(keyBase), nil)
+	var currentIdentity *types.Identity
+	for iter.Next() {
+		// tableName:id:attributeName => value
+		keyParts := strings.Split(string(iter.Key()), ":")
+
+		if currentIdentity == nil || (currentIdentity != nil && currentIdentity.ID != keyParts[1]) {
+			foundIdentity, findErr := sh.GetIdentity(keyParts[1])
+			if findErr != nil {
+				return
+			}
+
+			currentIdentity = foundIdentity
+			break
+		}
+	}
+
+	iter.Release()
+
+	_ = sh.SetPrimaryIdentity(currentIdentity.ID)
+}
+
 // DeleteIdentity deletes the identity from the DB
 func (sh *StorageHandler) DeleteIdentity(identity types.Identity) error {
-
 	fieldPairs := []struct {
 		key []byte
 	}{
@@ -482,7 +507,9 @@ func (sh *StorageHandler) DeleteIdentity(identity types.Identity) error {
 		return deleteError
 	}
 
-	// TODO Update the primary identity if primary is deleted
+	if identity.IsPrimary {
+		sh.passPrimaryIdentity()
+	}
 
 	return nil
 }

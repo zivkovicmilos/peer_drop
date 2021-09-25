@@ -78,6 +78,15 @@ func CreateWorkspace(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Unable to save workspace credentials", http.StatusInternalServerError)
 			return
 		}
+
+		// Update the identity number of joined workspaces
+		identity.NumWorkspaces++
+
+		updateErr := storage.GetStorageHandler().CreateIdentity(*identity)
+		if updateErr != nil {
+			http.Error(w, "Unable to update identity information", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	// Initialize the workspace locally

@@ -38,6 +38,7 @@
     "react-fileicons": "^2.1.1",
     "react-router-dom": "^5.2.1",
     "react-scripts": "4.0.3",
+    "react-transition-group": "^4.4.2",
     "typescript": "^4.1.2",
     "web-vitals": "^1.0.1",
     "yup": "^0.32.9"

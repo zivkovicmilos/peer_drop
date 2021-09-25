@@ -109,7 +109,7 @@ const IdentityCard: FC<IIdentityCardProps> = (props) => {
             setTriggerUpdate(!triggerUpdate);
           })
           .catch((err) => {
-            openSnackbar('Unable to export private key', 'error');
+            openSnackbar('Unable to delete identity', 'error');
           });
       }
     },

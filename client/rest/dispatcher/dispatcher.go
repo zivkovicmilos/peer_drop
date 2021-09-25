@@ -18,6 +18,7 @@ import (
 	"github.com/zivkovicmilos/peer_drop/rest/crypto"
 	"github.com/zivkovicmilos/peer_drop/rest/identities"
 	"github.com/zivkovicmilos/peer_drop/rest/rendezvous"
+	"github.com/zivkovicmilos/peer_drop/rest/search"
 	"github.com/zivkovicmilos/peer_drop/rest/workspaces"
 	"github.com/zivkovicmilos/peer_drop/storage"
 )
@@ -174,6 +175,9 @@ func (d *Dispatcher) registerEndpoints() {
 	d.router.HandleFunc("/api/rendezvous", rendezvous.GetRendezvousNodes).Methods("GET")
 	d.router.HandleFunc("/api/rendezvous", rendezvous.AddRendezvousNode).Methods("POST")
 	d.router.HandleFunc("/api/rendezvous", rendezvous.RemoveRendezvousNode).Methods("DELETE")
+
+	// Search
+	d.router.HandleFunc("/api/search", search.GetSearchResults).Methods("GET")
 
 	// Shutdown handler
 	d.router.HandleFunc("/api/shutdown", ShutdownHandler).Methods("POST")

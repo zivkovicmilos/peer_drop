@@ -254,7 +254,17 @@ func GetPrivateKey(w http.ResponseWriter, r *http.Request) {
 func DeleteIdentity(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 
-	// TODO add a constraint that at least 1 identity needs to exist
+	_, total, err := storage.GetStorageHandler().GetIdentities(utils.NoPagination, utils.DefaultSort)
+	if err != nil {
+		http.Error(w, "Unable to fetch identity", http.StatusInternalServerError)
+		return
+	}
+
+	if total == 1 {
+		// An attempt to delete the last identity
+		http.Error(w, "Unable to delete last identity", http.StatusBadRequest)
+		return
+	}
 
 	// Check to see if the identity exists
 	identity, identityError := storage.GetStorageHandler().GetIdentity(params["identityId"])
