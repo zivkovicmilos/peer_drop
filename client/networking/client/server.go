@@ -1608,11 +1608,16 @@ func (cs *ClientServer) DownloadFile(
 	return nil
 }
 
+type DownloadedFileWrapper struct {
+	FileName string
+	FilePath string
+}
+
 // HandleFileDownload handles file downloads from a remote peer
 func (cs *ClientServer) HandleFileDownload(
 	mnemonic string,
 	fileChecksum string,
-) error {
+) (*DownloadedFileWrapper, error) {
 	start := time.Now()
 	// Set the download directory
 	baseDir, _ := cs.workspaceDirectoryMap[mnemonic]
@@ -1621,20 +1626,20 @@ func (cs *ClientServer) HandleFileDownload(
 	// Get workspace info
 	workspaceInfo, findErr := storage.GetStorageHandler().GetWorkspaceInfo(mnemonic)
 	if findErr != nil {
-		return findErr
+		return nil, findErr
 	}
 	if workspaceInfo == nil {
-		return errors.New("unknown workspace requested")
+		return nil, errors.New("unknown workspace requested")
 	}
 
 	// Get workspace credentials
 	credentials, credErr := storage.GetStorageHandler().GetWorkspaceCredentials(mnemonic)
 	if credErr != nil {
-		return credErr
+		return nil, credErr
 	}
 
 	if credentials == nil {
-		return errors.New("unknown credentials")
+		return nil, errors.New("unknown credentials")
 	}
 
 	mux, _ := cs.fileAggregatorMuxMap[mnemonic]
@@ -1643,7 +1648,7 @@ func (cs *ClientServer) HandleFileDownload(
 	mux.RUnlock()
 
 	if len(peers) < 0 {
-		return errors.New("no peers")
+		return nil, errors.New("no peers")
 	}
 
 	var stream network.Stream
@@ -1658,7 +1663,7 @@ func (cs *ClientServer) HandleFileDownload(
 		break
 	}
 	if stream == nil {
-		return errors.New("unable to find available stream")
+		return nil, errors.New("unable to find available stream")
 	}
 
 	defer func(stream network.Stream) {
@@ -1682,7 +1687,7 @@ func (cs *ClientServer) HandleFileDownload(
 	if requestErr != nil {
 		cs.logger.Error(fmt.Sprintf("Unable to request file, %v", requestErr))
 
-		return requestErr
+		return nil, requestErr
 	}
 
 	// Figure out the AES / HMAC keys
@@ -1692,10 +1697,10 @@ func (cs *ClientServer) HandleFileDownload(
 	if workspaceInfo.SecurityType == "password" {
 		// Generate the data
 		if credentials.Password == nil {
-			return errors.New("no password for solution")
+			return nil, errors.New("no password for solution")
 		}
 		if fileMetadata.Salt == nil {
-			return errors.New("bad request - missing salt")
+			return nil, errors.New("bad request - missing salt")
 		}
 
 		solution := localCrypto.GeneratePasswordFileSharingSolution(
@@ -1708,15 +1713,15 @@ func (cs *ClientServer) HandleFileDownload(
 	} else {
 		// Decrypt the data
 		if credentials.PrivateKey == nil {
-			return errors.New("no private key for solution")
+			return nil, errors.New("no private key for solution")
 		}
 
 		if fileMetadata.EncryptedAesKey == nil {
-			return errors.New("bad request - missing aes key")
+			return nil, errors.New("bad request - missing aes key")
 		}
 
 		if fileMetadata.EncryptedHmacKey == nil {
-			return errors.New("bad request - missing hmac key")
+			return nil, errors.New("bad request - missing hmac key")
 		}
 
 		solution, solErr := localCrypto.GenerateKeyFileSharingSolution(
@@ -1725,7 +1730,7 @@ func (cs *ClientServer) HandleFileDownload(
 			fileMetadata.EncryptedHmacKey,
 		)
 		if solErr != nil {
-			return errors.New(fmt.Sprintf("unable to find solution, %v", solErr))
+			return nil, errors.New(fmt.Sprintf("unable to find solution, %v", solErr))
 		}
 
 		aesKey = solution.AESKey
@@ -1734,7 +1739,7 @@ func (cs *ClientServer) HandleFileDownload(
 
 	aes, err := aes.NewCipher(aesKey)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	ctr := cipher.NewCTR(aes, fileMetadata.IV)
@@ -1746,7 +1751,7 @@ func (cs *ClientServer) HandleFileDownload(
 	if downloadErr != nil {
 		cs.logger.Error(fmt.Sprintf("Unable to download file, %v", requestErr))
 
-		return requestErr
+		return nil, requestErr
 	}
 
 	// Start the download
@@ -1762,7 +1767,7 @@ func (cs *ClientServer) HandleFileDownload(
 			}
 			cs.logger.Error("Error with file download")
 
-			return err
+			return nil, err
 		}
 		if lastChunk != nil {
 			hmac.Write(lastChunk)
@@ -1789,7 +1794,7 @@ func (cs *ClientServer) HandleFileDownload(
 
 		cs.logger.Debug(fmt.Sprintf("Expected %v found %v", fileMetadata.IV, extractedIV))
 
-		return errors.New("IV doesn't match")
+		return nil, errors.New("IV doesn't match")
 	}
 
 	// Compare the HMAC
@@ -1798,17 +1803,18 @@ func (cs *ClientServer) HandleFileDownload(
 
 		cs.logger.Debug(fmt.Sprintf("Expected %v found %v", calculatedHMAC, extractedHMAC))
 
-		return errors.New("HMAC doesn't match")
+		return nil, errors.New("HMAC doesn't match")
 	}
 
 	// Write data to disk
+	downloadFilePath := fmt.Sprintf("%s/%s", filePath, fileMetadata.FileName)
 	saveFile, createErr := os.Create(
-		fmt.Sprintf("%s/%s", filePath, fileMetadata.FileName),
+		downloadFilePath,
 	)
 	if createErr != nil {
 		cs.logger.Error(fmt.Sprintf("Unable to create placeholder file, %v", createErr))
 
-		return requestErr
+		return nil, requestErr
 	}
 	defer saveFile.Close()
 
@@ -1817,10 +1823,13 @@ func (cs *ClientServer) HandleFileDownload(
 		finalFileData[:len(finalFileData)-len(lastChunk)],
 	)
 	if writeErr != nil {
-		return errors.New("unable to write final file data")
+		return nil, errors.New("unable to write final file data")
 	}
 
 	elapsed := time.Since(start)
 	cs.logger.Info(fmt.Sprintf("Downloaded file %s in %s", fileMetadata.FileName, elapsed))
-	return nil
+	return &DownloadedFileWrapper{
+		FileName: fileMetadata.FileName,
+		FilePath: downloadFilePath,
+	}, nil
 }

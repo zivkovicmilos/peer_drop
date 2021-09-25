@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/golang/protobuf/jsonpb"
@@ -406,7 +407,7 @@ func DownloadWorkspaceFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	clientServer := servicehandler.GetServiceHandler().GetClientServer()
-	downloadErr := clientServer.HandleFileDownload( // TODO return file
+	downloadInfo, downloadErr := clientServer.HandleFileDownload(
 		downloadFileRequest.WorkspaceMnemonic,
 		downloadFileRequest.FileChecksum,
 	)
@@ -416,8 +417,7 @@ func DownloadWorkspaceFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if encodeErr := json.NewEncoder(w).Encode("Workspace file downloaded!"); encodeErr != nil {
-		http.Error(w, "Unable to encode response", http.StatusInternalServerError)
-		return
-	}
+	w.Header().Set("Content-Disposition", "attachment; filename="+strconv.Quote(downloadInfo.FileName))
+	w.Header().Set("Content-Type", "application/octet-stream")
+	http.ServeFile(w, r, downloadInfo.FilePath)
 }
