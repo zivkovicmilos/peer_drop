@@ -69,4 +69,10 @@ export default class CommonUtils {
   static unformatMnemonic(mnemonic: string): string {
     return mnemonic.replace(/-/g, ' ');
   }
+
+  static base64ToArrayBuffer(base64: string) {
+    const binaryString = window.atob(base64); // Comment this if not using base64
+    const bytes = new Uint8Array(binaryString.length);
+    return bytes.map((byte, i) => binaryString.charCodeAt(i));
+  }
 }

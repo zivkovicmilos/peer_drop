@@ -30,12 +30,15 @@ class WorkspacesService {
 
   public static async downloadFile(
     request: IDownloadFileRequest
-  ): Promise<string> {
+  ): Promise<any> {
     try {
-      return await RestService.post<string>({
+      return await RestService.post<any>({
         url: `workspaces/download`,
         data: {
           ...request
+        },
+        config: {
+          responseType: 'blob'
         }
       });
     } catch (err) {

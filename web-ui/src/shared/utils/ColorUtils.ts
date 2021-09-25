@@ -3,7 +3,7 @@ import theme from '../../theme/theme';
 export default class ColorUtils {
   // Returns the corresponding color codes for the file icons
   static getColorCode(extension: string): ColorCode {
-    switch (extension) {
+    switch (extension.toLowerCase()) {
       case '.go':
       case '.png':
       case '.jpeg':

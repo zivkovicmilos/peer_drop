@@ -13,6 +13,7 @@ import {
 import { makeStyles } from '@material-ui/core/styles';
 import GetAppRoundedIcon from '@material-ui/icons/GetAppRounded';
 import clsx from 'clsx';
+import { saveAs } from 'file-saver';
 import moment from 'moment';
 import { FC, useEffect, useState } from 'react';
 import FileIcon, { IconStyle } from 'react-fileicons';
@@ -68,7 +69,11 @@ const ViewWorkspaceFiles: FC<IViewWorkspaceFilesProps> = (props) => {
 
   const classes = useStyles();
 
-  const handleDownload = (checksum: string) => {
+  const handleDownload = (
+    checksum: string,
+    name: string,
+    extension: string
+  ) => {
     const downloadFile = async () => {
       return await WorkspacesService.downloadFile({
         workspaceMnemonic: workspaceInfo.workspaceMnemonic,
@@ -78,14 +83,17 @@ const ViewWorkspaceFiles: FC<IViewWorkspaceFilesProps> = (props) => {
 
     downloadFile()
       .then((response) => {
+        saveAs(response, renderItemName(name, extension));
+
         openSnackbar('File successfully downloaded', 'success');
       })
       .catch((err) => {
+        console.error(err);
         openSnackbar('Unable to download file', 'error');
       });
   };
 
-  const renderActions = (checksum: string) => {
+  const renderActions = (checksum: string, name: string, extension: string) => {
     return (
       <Box display={'flex'} alignItems={'center'} justifyContent={'center'}>
         <IconButton
@@ -93,7 +101,7 @@ const ViewWorkspaceFiles: FC<IViewWorkspaceFilesProps> = (props) => {
             root: 'iconButtonRoot'
           }}
           onClick={() => {
-            handleDownload(checksum);
+            handleDownload(checksum, name, extension);
           }}
         >
           <GetAppRoundedIcon
@@ -202,7 +210,7 @@ const ViewWorkspaceFiles: FC<IViewWorkspaceFilesProps> = (props) => {
                     className={clsx(classes.noBorder, classes.tableCell)}
                     align="center"
                   >
-                    {renderActions(row.checksum)}
+                    {renderActions(row.checksum, row.name, row.extension)}
                   </TableCell>
                 </TableRow>
               ))}

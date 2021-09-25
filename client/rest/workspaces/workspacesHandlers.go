@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/gorilla/mux"
@@ -417,7 +418,17 @@ func DownloadWorkspaceFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	f, err := os.Open(downloadInfo.FilePath)
+	if err != nil {
+		http.Error(w, "Unable to download file", http.StatusInternalServerError)
+		return
+	}
+	defer f.Close()
+
 	w.Header().Set("Content-Disposition", "attachment; filename="+strconv.Quote(downloadInfo.FileName))
 	w.Header().Set("Content-Type", "application/octet-stream")
-	http.ServeFile(w, r, downloadInfo.FilePath)
+	w.Header().Set("Content-Transfer-Encoding", "binary")
+	w.Header().Set("Expires", "0")
+
+	http.ServeContent(w, r, downloadInfo.FilePath, time.Now(), f)
 }

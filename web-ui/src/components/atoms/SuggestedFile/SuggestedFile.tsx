@@ -1,6 +1,7 @@
 import { Box, Typography } from '@material-ui/core';
 import { makeStyles } from '@material-ui/core/styles';
 import clsx from 'clsx';
+import { saveAs } from 'file-saver';
 import { FC } from 'react';
 import FileIcon, { IconStyle } from 'react-fileicons';
 import WorkspacesService from '../../../services/workspaces/workspacesService';
@@ -17,8 +18,15 @@ const SuggestedFile: FC<ISuggestedFileProps> = (props) => {
   const colorCode = ColorUtils.getColorCode(file.extension);
 
   const { openSnackbar } = useSnackbar();
+  const renderItemName = (name: string, extension: string) => {
+    return `${name}${extension}`;
+  };
 
-  const handleDownload = (checksum: string) => {
+  const handleDownload = (
+    checksum: string,
+    name: string,
+    extension: string
+  ) => {
     const downloadFile = async () => {
       return await WorkspacesService.downloadFile({
         workspaceMnemonic: CommonUtils.unformatMnemonic(workspaceMnemonic),
@@ -28,6 +36,8 @@ const SuggestedFile: FC<ISuggestedFileProps> = (props) => {
 
     downloadFile()
       .then((response) => {
+        saveAs(response, renderItemName(name, extension));
+
         openSnackbar('File successfully downloaded', 'success');
       })
       .catch((err) => {
@@ -43,7 +53,7 @@ const SuggestedFile: FC<ISuggestedFileProps> = (props) => {
       }}
       ml={4}
       onClick={() => {
-        handleDownload(file.checksum);
+        handleDownload(file.checksum, file.name, file.extension);
       }}
     >
       <Box
