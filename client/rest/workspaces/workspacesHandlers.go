@@ -247,6 +247,53 @@ func GetWorkspaceNumPeers(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// LeaveWorkspace leaves a specific workspace and tears down any
+// running services
+func LeaveWorkspace(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+
+	outputArr := strings.Split(params["mnemonic"], "-")
+	mnemonic := strings.Join(outputArr[:], " ")
+
+	// Check if we know this workspace
+	workspaceInfo, workspaceError := storage.GetStorageHandler().GetWorkspaceInfo(mnemonic)
+	if workspaceError != nil {
+		http.Error(w, "Unable to fetch workspace info", http.StatusInternalServerError)
+		return
+	}
+
+	if workspaceInfo == nil {
+		http.Error(w, "Workspace not found", http.StatusNotFound)
+		return
+	}
+
+	// Tear down running services, wipe the file directory
+	clientServer := servicehandler.GetServiceHandler().GetClientServer()
+	teardownErr := clientServer.TeardownWorkspace(mnemonic)
+	if teardownErr != nil {
+		http.Error(w, "Unable to teardown workspace", http.StatusInternalServerError)
+		return
+	}
+
+	// Wipe the workspace from the local DB, along with any credentials
+	deleteErr := storage.GetStorageHandler().DeleteWorkspaceInfo(mnemonic)
+	if deleteErr != nil {
+		http.Error(w, "Unable to delete workspace credentials", http.StatusInternalServerError)
+		return
+	}
+
+	deleteErr = storage.GetStorageHandler().DeleteWorkspaceCredentials(mnemonic)
+	if deleteErr != nil {
+		http.Error(w, "Unable to delete workspace credentials", http.StatusInternalServerError)
+		return
+	}
+
+	if encodeErr := json.NewEncoder(w).Encode("Workspace deleted"); encodeErr != nil {
+		http.Error(w, "Unable to encode response", http.StatusInternalServerError)
+		return
+	}
+}
+
 func JoinWorkspace(w http.ResponseWriter, r *http.Request) {
 	var joinWorkspaceRequest types.JoinWorkspaceRequest
 
@@ -283,15 +330,17 @@ func JoinWorkspace(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Save the workspace credentials
-		if createErr := storage.GetStorageHandler().CreateWorkspaceCredentials(
-			workspaceInfo.Mnemonic,
-			nil,
-			nil,
-			&joinWorkspaceRequest.Password,
-		); createErr != nil {
-			http.Error(w, "Unable to save workspace credentials", http.StatusInternalServerError)
-			return
+		if confirmed {
+			// Save the workspace credentials
+			if createErr := storage.GetStorageHandler().CreateWorkspaceCredentials(
+				workspaceInfo.Mnemonic,
+				nil,
+				nil,
+				&joinWorkspaceRequest.Password,
+			); createErr != nil {
+				http.Error(w, "Unable to save workspace credentials", http.StatusInternalServerError)
+				return
+			}
 		}
 	} else {
 		// Public key authentication
@@ -308,20 +357,31 @@ func JoinWorkspace(w http.ResponseWriter, r *http.Request) {
 
 		confirmed = clientServer.JoinWorkspacePublicKey(workspaceInfo, identity.PublicKey)
 
-		if createErr := storage.GetStorageHandler().CreateWorkspaceInfo(workspaceInfo); createErr != nil {
-			http.Error(w, "Unable to save workspace", http.StatusInternalServerError)
-			return
-		}
+		if confirmed {
+			if createErr := storage.GetStorageHandler().CreateWorkspaceInfo(workspaceInfo); createErr != nil {
+				http.Error(w, "Unable to save workspace", http.StatusInternalServerError)
+				return
+			}
 
-		// Save the workspace credentials
-		if createErr := storage.GetStorageHandler().CreateWorkspaceCredentials(
-			workspaceInfo.Mnemonic,
-			&identity.PublicKey,
-			&identity.PrivateKey,
-			nil,
-		); createErr != nil {
-			http.Error(w, "Unable to save workspace credentials", http.StatusInternalServerError)
-			return
+			// Save the workspace credentials
+			if createErr := storage.GetStorageHandler().CreateWorkspaceCredentials(
+				workspaceInfo.Mnemonic,
+				&identity.PublicKey,
+				&identity.PrivateKey,
+				nil,
+			); createErr != nil {
+				http.Error(w, "Unable to save workspace credentials", http.StatusInternalServerError)
+				return
+			}
+
+			// Update the identity number of joined workspaces
+			identity.NumWorkspaces++
+
+			updateErr := storage.GetStorageHandler().CreateIdentity(*identity)
+			if updateErr != nil {
+				http.Error(w, "Unable to update identity information", http.StatusInternalServerError)
+				return
+			}
 		}
 	}
 
@@ -334,7 +394,7 @@ func JoinWorkspace(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		http.Error(w, "Unable to join workspace", http.StatusBadRequest)
+		http.Error(w, "Access not allowed", http.StatusBadRequest)
 	}
 
 	return

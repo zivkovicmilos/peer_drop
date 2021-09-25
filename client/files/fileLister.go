@@ -28,6 +28,7 @@ type FileLister struct {
 
 	sweepInterval   time.Duration
 	sweepInProgress atomic.Bool
+	serviceRunning  atomic.Bool
 
 	stopChannel chan struct{}
 }
@@ -49,6 +50,7 @@ func NewFileLister(
 
 // Start starts the file lister
 func (fl *FileLister) Start() {
+	fl.serviceRunning.Store(true)
 	go fl.sweepDirectoryLoop()
 }
 
@@ -167,14 +169,21 @@ func (fl *FileLister) sweepDirectoryLoop() {
 
 	go func() {
 		<-fl.stopChannel
+		fl.logger.Info("Stop message received")
 		ticker.Stop()
 
-		return
+		fl.serviceRunning.Store(false)
 	}()
+
 	for {
 		select {
 		case _ = <-ticker.C:
-			go fl.sweepDirectory()
+			if !fl.serviceRunning.Load() {
+				break
+			}
+
+			fl.sweepDirectory()
+
 		}
 	}
 }

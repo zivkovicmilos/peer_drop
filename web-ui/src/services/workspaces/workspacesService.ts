@@ -28,6 +28,17 @@ class WorkspacesService {
     }
   }
 
+  public static async leaveWorkspace(mnemonic: string): Promise<string> {
+    try {
+      return await RestService.delete<string>({
+        url: `workspaces/${mnemonic}`
+      });
+    } catch (err) {
+      console.warn(err);
+      throw err;
+    }
+  }
+
   public static async downloadFile(
     request: IDownloadFileRequest
   ): Promise<any> {

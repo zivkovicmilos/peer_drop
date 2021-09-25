@@ -750,6 +750,22 @@ func (sh *StorageHandler) GetWorkspaces(paginationLimits utils.PaginationLimits)
 	return foundWorkspaces, totalWorkspaces, err
 }
 
+// DeleteWorkspaceInfo deletes the workspace info associated with the given mnemonic
+func (sh *StorageHandler) DeleteWorkspaceInfo(mnemonic string) error {
+	entityKeyBase := append(append(WORKSPACE_INFO, delimiter...), append([]byte(mnemonic), delimiter...)...)
+	iter := sh.db.NewIterator(util.BytesPrefix(entityKeyBase), nil)
+	for iter.Next() {
+		deleteError := sh.db.Delete(iter.Key(), nil)
+		if deleteError != nil {
+			return deleteError
+		}
+	}
+
+	iter.Release()
+
+	return iter.Error()
+}
+
 // CreateWorkspaceInfo stores the workspace info into the rendezvous DB
 func (sh *StorageHandler) CreateWorkspaceInfo(workspaceInfo *proto.WorkspaceInfo) error {
 	fieldPairs := []struct {
@@ -961,6 +977,35 @@ func (sh *StorageHandler) CreateWorkspaceCredentials(
 		putError := sh.db.Put(append(entityKeyBase, field.key...), field.value, nil)
 		if putError != nil {
 			return putError
+		}
+	}
+
+	return nil
+}
+
+// DeleteWorkspaceCredentials deletes workspace credentials
+func (sh *StorageHandler) DeleteWorkspaceCredentials(
+	mnemonic string,
+) error {
+	fieldPairs := []struct {
+		key []byte
+	}{
+		{
+			key: WORKSPACE_CREDENTIALS_PUBLIC_KEY,
+		},
+		{
+			key: WORKSPACE_CREDENTIALS_PRIVATE_KEY,
+		},
+		{
+			key: WORKSPACE_CREDENTIALS_PASSWORD,
+		},
+	}
+
+	entityKeyBase := append(append(WORKSPACE_CREDENTIALS, delimiter...), append([]byte(mnemonic), delimiter...)...)
+	for _, field := range fieldPairs {
+		deleteErr := sh.db.Delete(append(entityKeyBase, field.key...), nil)
+		if deleteErr != nil {
+			return deleteErr
 		}
 	}
 

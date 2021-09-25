@@ -71,10 +71,11 @@ type ClientServer struct {
 	newWorkspaceChannel chan *proto.WorkspaceInfo
 
 	// Locks //
-	rendezvousMux        sync.RWMutex
-	verifiedPeersMuxMap  map[string]sync.RWMutex // mnemonic -> rwmutex
-	fileListerMuxMap     map[string]sync.RWMutex // mnemonic -> rwmutex
-	fileAggregatorMuxMap map[string]sync.RWMutex // mnemonic -> rwmutex
+	rendezvousMux            sync.RWMutex
+	verifiedPeersMuxMap      map[string]sync.RWMutex // mnemonic -> rwmutex
+	fileListerMuxMap         map[string]sync.RWMutex // mnemonic -> rwmutex
+	fileAggregatorMuxMap     map[string]sync.RWMutex // mnemonic -> rwmutex
+	workspaceDirectoryMuxMap map[string]sync.RWMutex // mnemonic -> rwmutex
 
 	// Context //
 	ctx        context.Context
@@ -94,21 +95,22 @@ func NewClientServer(
 	nodeConfig *config.NodeConfig,
 ) *ClientServer {
 	return &ClientServer{
-		logger:                logger.Named("networking"),
-		nodeConfig:            nodeConfig,
-		rendezvousIDs:         make([]peer.ID, 0),
-		verifiedPeers:         make(map[string][]peer.ID),
-		joinRequests:          make(map[string]*joinRequest),
-		newWorkspaceChannel:   make(chan *proto.WorkspaceInfo),
-		workspaceDirectoryMap: make(map[string]string),
-		pubsubTopics:          make(map[string]*pubsub.Topic),
-		pubsubSubscriptions:   make(map[string]*pubsub.Subscription),
-		fileListerMap:         make(map[string]*files.FileLister),
-		fileAggregatorMap:     make(map[string]*files.FileAggregator),
-		fileListerMuxMap:      make(map[string]sync.RWMutex),
-		verifiedPeersMuxMap:   make(map[string]sync.RWMutex),
-		fileAggregatorMuxMap:  make(map[string]sync.RWMutex),
-		downloadRequestMap:    make(map[string]fileMetadataWrapper),
+		logger:                   logger.Named("networking"),
+		nodeConfig:               nodeConfig,
+		rendezvousIDs:            make([]peer.ID, 0),
+		verifiedPeers:            make(map[string][]peer.ID),
+		joinRequests:             make(map[string]*joinRequest),
+		newWorkspaceChannel:      make(chan *proto.WorkspaceInfo),
+		workspaceDirectoryMap:    make(map[string]string),
+		pubsubTopics:             make(map[string]*pubsub.Topic),
+		pubsubSubscriptions:      make(map[string]*pubsub.Subscription),
+		fileListerMap:            make(map[string]*files.FileLister),
+		fileAggregatorMap:        make(map[string]*files.FileAggregator),
+		fileListerMuxMap:         make(map[string]sync.RWMutex),
+		verifiedPeersMuxMap:      make(map[string]sync.RWMutex),
+		fileAggregatorMuxMap:     make(map[string]sync.RWMutex),
+		workspaceDirectoryMuxMap: make(map[string]sync.RWMutex),
+		downloadRequestMap:       make(map[string]fileMetadataWrapper),
 
 		pubsubSubscriptionsStop: make(map[string]chan struct{}),
 		pubsubTopicsStop:        make(map[string]chan struct{}),
@@ -328,17 +330,12 @@ func (cs *ClientServer) startPeerDropService() error {
 
 	// For each individual workspace, initialize it
 	for _, workspaceInfo := range foundWorkspaces {
-		//go func(workspaceInfo *proto.WorkspaceInfo) {
-		//	err := cs.initializeWorkspace(workspaceInfo)
-		//	if err != nil {
-		//		cs.logger.Error(fmt.Sprintf("Unable to initialize workspace, %v", err))
-		//	}
-		//}(workspaceInfo)
-		// TODO return to goroutine
-		err := cs.initializeWorkspace(workspaceInfo)
-		if err != nil {
-			cs.logger.Error(fmt.Sprintf("Unable to initialize workspace, %v", err))
-		}
+		go func(workspaceInfo *proto.WorkspaceInfo) {
+			err := cs.initializeWorkspace(workspaceInfo)
+			if err != nil {
+				cs.logger.Error(fmt.Sprintf("Unable to initialize workspace, %v", err))
+			}
+		}(workspaceInfo)
 	}
 
 	cs.logger.Info("peer_drop service started")
@@ -555,9 +552,12 @@ func (cs *ClientServer) startSubscriptionListener(mnemonic string) {
 
 		cs.logger.Info(fmt.Sprintf("Files in message: [%d]", len(peerFileList.FileList)))
 
-		updateChannel <- files.FileListWrapper{
-			FileList: peerFileList,
-			PeerID:   fileListMessage.ReceivedFrom,
+		_, ok := cs.fileAggregatorMap[mnemonic]
+		if ok {
+			updateChannel <- files.FileListWrapper{
+				FileList: peerFileList,
+				PeerID:   fileListMessage.ReceivedFrom,
+			}
 		}
 	}
 }
@@ -1007,25 +1007,6 @@ func (cs *ClientServer) disconnectFromPeer(peerID peer.ID) {
 	}
 }
 
-// TODO remove
-func (cs *ClientServer) printCredentials(credentials *workspaceCredentials) {
-	var sb strings.Builder
-
-	if credentials.privateKey != nil {
-		sb.WriteString(fmt.Sprintf("  CRED PRV :%s  ", *credentials.privateKey))
-	}
-
-	if credentials.publicKey != nil {
-		sb.WriteString(fmt.Sprintf("  CRED PUB :%s  ", *credentials.publicKey))
-	}
-
-	if credentials.password != nil {
-		sb.WriteString(fmt.Sprintf("  CRED PASS :%s  ", *credentials.password))
-	}
-
-	cs.logger.Info(sb.String())
-}
-
 // handleHandshake executes the handshake process
 func (cs *ClientServer) handleHandshake(
 	peerID peer.ID,
@@ -1169,7 +1150,7 @@ func (cs *ClientServer) BeginVerification(
 ) (*proto.Challenge, error) {
 	// Check if the current node has the workspace info
 	workspaceInfo, findErr := storage.GetStorageHandler().GetWorkspaceInfo(request.WorkspaceMnemonic)
-	if findErr != nil {
+	if findErr != nil || workspaceInfo == nil {
 		cs.logger.Error(
 			"Verification requested for unknown workspace ",
 			request.WorkspaceMnemonic,
@@ -1274,7 +1255,7 @@ func (cs *ClientServer) BeginVerification(
 	}
 
 	// Save join request locally
-	cs.joinRequests[challenge.ChallengeId] = &joinRequest{ // TODO prune this
+	cs.joinRequests[challenge.ChallengeId] = &joinRequest{
 		workspaceMnemonic: workspaceInfo.Mnemonic,
 		challenge:         challenge,
 		unencryptedData:   unencryptedData,
@@ -1296,7 +1277,8 @@ func (cs *ClientServer) FinishVerification(
 	}()
 
 	if !found {
-		// TODO close connection to peer
+		defer cs.disconnectFromPeer(context.(*WrappedContext).PeerID)
+
 		return ConstructVerificationResponse("Unknown challenge", false),
 			errors.New("unknown challenge")
 	}
@@ -1431,6 +1413,10 @@ func (cs *ClientServer) GetNumberOfPeers(mnemonic string) int {
 
 // GetWorkspaceSaveDir gets the directory where files should be saved for a specific workspace
 func (cs *ClientServer) GetWorkspaceSaveDir(mnemonic string) (string, error) {
+	mux, _ := cs.workspaceDirectoryMuxMap[mnemonic]
+	mux.RLock()
+	defer mux.RUnlock()
+
 	directory, ok := cs.workspaceDirectoryMap[mnemonic]
 	if !ok {
 		cs.logger.Error(fmt.Sprintf("Requesting directory for unknown mnemonic [%s]", mnemonic))
@@ -1678,7 +1664,10 @@ func (cs *ClientServer) HandleFileDownload(
 ) (*DownloadedFileWrapper, error) {
 	start := time.Now()
 	// Set the download directory
+	mux, _ := cs.workspaceDirectoryMuxMap[mnemonic]
+	mux.RLock()
 	baseDir, _ := cs.workspaceDirectoryMap[mnemonic]
+	mux.RUnlock()
 	filePath := fmt.Sprintf("%s/%s", baseDir, config.DirectoryTemp)
 
 	// Get workspace info
@@ -1700,7 +1689,7 @@ func (cs *ClientServer) HandleFileDownload(
 		return nil, errors.New("unknown credentials")
 	}
 
-	mux, _ := cs.fileAggregatorMuxMap[mnemonic]
+	mux, _ = cs.fileAggregatorMuxMap[mnemonic]
 	mux.RLock()
 	peers := cs.fileAggregatorMap[mnemonic].GetFilePeers(fileChecksum)
 	mux.RUnlock()
@@ -1740,7 +1729,7 @@ func (cs *ClientServer) HandleFileDownload(
 	fileMetadata, requestErr := clientProto.RequestFile(context.Background(), &proto.FileRequest{
 		Mnemonic:     mnemonic,
 		FileChecksum: fileChecksum,
-		PublicKey:    nil,
+		PublicKey:    credentials.PublicKey,
 	})
 	if requestErr != nil {
 		cs.logger.Error(fmt.Sprintf("Unable to request file, %v", requestErr))
@@ -1890,4 +1879,65 @@ func (cs *ClientServer) HandleFileDownload(
 		FileName: fileMetadata.FileName,
 		FilePath: downloadFilePath,
 	}, nil
+}
+
+// TeardownWorkspace stops any running services and wipes the directory structure
+func (cs *ClientServer) TeardownWorkspace(mnemonic string) error {
+	cs.logger.Info(fmt.Sprintf("Starting teardown process for [%s]", mnemonic))
+	// Stop the pubsub topics and subscriptions
+	subscriptionStop, ok := cs.pubsubSubscriptionsStop[mnemonic]
+	if ok {
+		go func() {
+			subscriptionStop <- struct{}{}
+		}()
+	}
+
+	topicStop, ok := cs.pubsubTopicsStop[mnemonic]
+	if ok {
+		go func() {
+			topicStop <- struct{}{}
+		}()
+	}
+
+	// Stop the FileLister service
+	cs.unregisterFileLister(mnemonic)
+
+	// Stop the FileAggregator service
+	cs.unregisterFileAggregator(mnemonic)
+
+	// Stop the find peers service
+	findPeersStop, ok := cs.findPeersStop[mnemonic]
+	if ok {
+		go func() {
+			findPeersStop <- struct{}{}
+		}()
+	}
+
+	// Delete the verified peer entries
+	mux, _ := cs.verifiedPeersMuxMap[mnemonic]
+	mux.Lock()
+	verifiedPeers, ok := cs.verifiedPeers[mnemonic]
+	delete(cs.verifiedPeers, mnemonic)
+	mux.Unlock()
+	if ok {
+		for _, peerID := range verifiedPeers {
+			// Disconnect from every verified peer on this workspace
+			cs.disconnectFromPeer(peerID)
+		}
+	}
+
+	// Wipe the directory
+	mux, _ = cs.workspaceDirectoryMuxMap[mnemonic]
+	mux.Lock()
+	baseDirectory, ok := cs.workspaceDirectoryMap[mnemonic]
+	delete(cs.workspaceDirectoryMap, mnemonic)
+	mux.Unlock()
+	if ok {
+		if err := os.RemoveAll(baseDirectory); err != nil {
+			return err
+		}
+	}
+
+	cs.logger.Info(fmt.Sprintf("Teardown finished for [%s]", mnemonic))
+	return nil
 }

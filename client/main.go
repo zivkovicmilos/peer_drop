@@ -153,7 +153,7 @@ func setupAsClient(logger hclog.Logger, nodeConfig *config.NodeConfig) {
 	clientServer := client.NewClientServer(logger, nodeConfig)
 	servicehandler.GetServiceHandler().SetClientServer(clientServer)
 
-	clientServer.Start(servicehandler.GetServiceHandler().RegisterCloseListener("client-server")) // TODO start as goroutine
+	clientServer.Start(servicehandler.GetServiceHandler().RegisterCloseListener("client-server"))
 }
 
 // setupAsRendezvous sets up the current peer_drop. node as a rendezvous server

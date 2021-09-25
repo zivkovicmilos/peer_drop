@@ -162,6 +162,7 @@ func (d *Dispatcher) registerEndpoints() {
 	// Workspaces
 	d.router.HandleFunc("/api/workspaces", workspaces.CreateWorkspace).Methods("POST")
 	d.router.HandleFunc("/api/workspaces", workspaces.GetWorkspaces).Methods("GET")
+	d.router.HandleFunc("/api/workspaces/{mnemonic}", workspaces.LeaveWorkspace).Methods("DELETE")
 	d.router.HandleFunc("/api/workspaces/{mnemonic}/files", workspaces.GetWorkspaceFiles).Methods("GET")
 	d.router.HandleFunc("/api/workspaces/{mnemonic}/peers", workspaces.GetWorkspaceNumPeers).Methods("GET")
 	d.router.HandleFunc("/api/join-workspace", workspaces.JoinWorkspace).Methods("POST")

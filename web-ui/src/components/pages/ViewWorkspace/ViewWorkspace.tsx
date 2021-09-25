@@ -1,12 +1,26 @@
-import { Box, Button, Chip, IconButton, Tooltip } from '@material-ui/core';
+import {
+  Box,
+  Button,
+  Chip,
+  ClickAwayListener,
+  Grow,
+  IconButton,
+  MenuItem,
+  MenuList,
+  Paper,
+  Popper,
+  Tooltip
+} from '@material-ui/core';
 import { makeStyles } from '@material-ui/core/styles';
 import ArrowBackRoundedIcon from '@material-ui/icons/ArrowBackRounded';
+import ExitToAppRoundedIcon from '@material-ui/icons/ExitToAppRounded';
 import MoreVertRoundedIcon from '@material-ui/icons/MoreVertRounded';
-import { FC, Fragment, useEffect, useRef, useState } from 'react';
+import React, { FC, Fragment, useEffect, useRef, useState } from 'react';
 import { useHistory, useParams } from 'react-router-dom';
 import { ENewWorkspaceType } from '../../../context/newWorkspaceContext.types';
 import WorkspacesService from '../../../services/workspaces/workspacesService';
 import { IWorkspaceDetailedResponse } from '../../../services/workspaces/workspacesService.types';
+import { ReactComponent as Clipboard } from '../../../shared/assets/icons/content_paste_black_24dp.svg';
 import { ReactComponent as UploadIcon } from '../../../shared/assets/icons/file_upload_black_24dp.svg';
 import { ReactComponent as Loupe } from '../../../shared/assets/icons/loupe.svg';
 import CommonUtils from '../../../shared/utils/CommonUtils';
@@ -162,6 +176,48 @@ const ViewWorkspace: FC<IViewWorkspaceProps> = () => {
     }
   };
 
+  const handleWorkspaceCopy = () => {
+    navigator.clipboard.writeText(
+      CommonUtils.unformatMnemonic(workspaceMnemonic)
+    );
+
+    openSnackbar('Copied to clipboard!', 'success');
+  };
+
+  const handleWorkspaceLeave = () => {
+    const leaveWorkspace = async () => {
+      return await WorkspacesService.leaveWorkspace(workspaceMnemonic);
+    };
+
+    leaveWorkspace()
+      .then((response) => {
+        history.push('/workspaces');
+
+        openSnackbar('Workspace left', 'success');
+      })
+      .catch((err) => {
+        openSnackbar('Unable to leave workspace', 'error');
+      });
+  };
+
+  const [open, setOpen] = useState(false);
+  const anchorRef = useRef<HTMLDivElement>(null);
+
+  const handleToggle = () => {
+    setOpen((prevOpen) => !prevOpen);
+  };
+
+  const handleClose = (event: any) => {
+    if (
+      anchorRef.current &&
+      anchorRef.current.contains(event.target as HTMLElement)
+    ) {
+      return;
+    }
+
+    setOpen(false);
+  };
+
   if (workspaceDetailed) {
     return (
       <Box display={'flex'} width={'100%'} flexDirection={'column'}>
@@ -182,7 +238,12 @@ const ViewWorkspace: FC<IViewWorkspaceProps> = () => {
           <Box ml={2}>
             <PageTitle title={workspaceDetailed.workspaceName} />
           </Box>
-          <Box ml={1}>
+          <div
+            style={{
+              marginLeft: 1
+            }}
+            ref={anchorRef}
+          >
             <IconButton
               classes={{
                 root: 'iconButtonRoot'
@@ -194,9 +255,64 @@ const ViewWorkspace: FC<IViewWorkspaceProps> = () => {
                   height: '18px',
                   width: 'auto'
                 }}
+                onClick={handleToggle}
               />
             </IconButton>
-          </Box>
+            <Popper
+              placement={'bottom-start'}
+              open={open}
+              anchorEl={anchorRef.current}
+              role={undefined}
+              transition
+            >
+              {({ TransitionProps, placement }) => (
+                <Grow
+                  {...TransitionProps}
+                  style={{
+                    transformOrigin:
+                      placement === 'bottom' ? 'center top' : 'center bottom'
+                  }}
+                >
+                  <Paper>
+                    <ClickAwayListener onClickAway={handleClose}>
+                      <MenuList
+                        style={{
+                          background: 'white',
+                          borderRadius: '5px',
+                          boxShadow: 'none'
+                        }}
+                      >
+                        <MenuItem
+                          className={classes.userMenuItem}
+                          onClick={() => {
+                            handleWorkspaceCopy();
+                            handleToggle();
+                          }}
+                        >
+                          <Box display={'flex'}>
+                            <Clipboard />
+                            <Box ml={1}>Share</Box>
+                          </Box>
+                        </MenuItem>
+                        <MenuItem
+                          className={classes.userMenuItem}
+                          onClick={() => {
+                            handleWorkspaceLeave();
+                            handleToggle();
+                          }}
+                        >
+                          <Box display={'flex'}>
+                            <ExitToAppRoundedIcon />
+                            <Box ml={1}>Leave</Box>
+                          </Box>
+                        </MenuItem>
+                      </MenuList>
+                    </ClickAwayListener>
+                  </Paper>
+                </Grow>
+              )}
+            </Popper>
+          </div>
 
           <Box ml={'auto'} display={'flex'} alignItems={'center'}>
             {renderWorkspaceActions()}
@@ -239,6 +355,12 @@ const useStyles = makeStyles(() => {
       color: '#A6B0B9',
       fontSize: theme.typography.pxToRem(14),
       fontWeight: 500
+    },
+    userMenuItem: {
+      fontFamily: 'Montserrat',
+      fontWeight: 500,
+      fontSize: '0.875rem',
+      color: 'black'
     }
   };
 });
