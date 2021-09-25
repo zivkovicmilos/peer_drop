@@ -74,6 +74,7 @@ const ViewWorkspaceFiles: FC<IViewWorkspaceFilesProps> = (props) => {
     name: string,
     extension: string
   ) => {
+    openSnackbar('Started file download...', 'success');
     const downloadFile = async () => {
       return await WorkspacesService.downloadFile({
         workspaceMnemonic: workspaceInfo.workspaceMnemonic,

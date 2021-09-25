@@ -17,6 +17,7 @@ import (
 	"github.com/zivkovicmilos/peer_drop/rest/contacts"
 	"github.com/zivkovicmilos/peer_drop/rest/crypto"
 	"github.com/zivkovicmilos/peer_drop/rest/identities"
+	"github.com/zivkovicmilos/peer_drop/rest/rendezvous"
 	"github.com/zivkovicmilos/peer_drop/rest/workspaces"
 	"github.com/zivkovicmilos/peer_drop/storage"
 )
@@ -167,6 +168,11 @@ func (d *Dispatcher) registerEndpoints() {
 	d.router.HandleFunc("/api/workspaces/{mnemonic}", workspaces.GetWorkspaceInfo).Methods("GET")
 	d.router.HandleFunc("/api/workspaces/upload", workspaces.AddFileToWorkspace).Methods("POST")
 	d.router.HandleFunc("/api/workspaces/download", workspaces.DownloadWorkspaceFile).Methods("POST")
+
+	// Rendezvous
+	d.router.HandleFunc("/api/rendezvous", rendezvous.GetRendezvousNodes).Methods("GET")
+	d.router.HandleFunc("/api/rendezvous", rendezvous.AddRendezvousNode).Methods("POST")
+	d.router.HandleFunc("/api/rendezvous", rendezvous.RemoveRendezvousNode).Methods("DELETE")
 
 	// Shutdown handler
 	d.router.HandleFunc("/api/shutdown", ShutdownHandler).Methods("POST")

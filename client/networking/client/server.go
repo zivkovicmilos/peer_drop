@@ -733,6 +733,64 @@ func (cs *ClientServer) findBestRendezvous() (*peer.ID, error) {
 	return nil, errors.New("no suitable rendezvous node found")
 }
 
+// IsConnectedMaddr checks if the current node is connected to the given address
+func (cs *ClientServer) IsConnectedMaddr(address string) bool {
+	multiAddr, err := multiaddr.NewMultiaddr(address)
+	if err != nil {
+		return false
+	}
+
+	peerinfo, _ := peer.AddrInfoFromP2pAddr(multiAddr)
+
+	return cs.host.Network().Connectedness(peerinfo.ID) == network.Connected
+}
+
+// SetRendezvous sets the new rendezvous node list
+func (cs *ClientServer) SetRendezvous(addresses []string) {
+	cs.rendezvousMux.Lock()
+
+	// Disconnect from old nodes
+	oldList := cs.rendezvousIDs
+	for _, oldNode := range oldList {
+		cs.disconnectFromPeer(oldNode)
+	}
+
+	newList := make([]peer.ID, 0)
+	for _, addr := range addresses {
+		mAddr, mAddrErr := multiaddr.NewMultiaddr(addr)
+		if mAddrErr != nil {
+			cs.logger.Error(fmt.Sprintf("Unable to create multiaddr from value, %v", mAddrErr))
+			panic("Unable to sync with storage (invalid multiaddr from value)")
+		}
+
+		peerinfo, _ := peer.AddrInfoFromP2pAddr(mAddr)
+		newList = append(newList, peerinfo.ID)
+	}
+
+	var wg sync.WaitGroup
+	for _, peerAddr := range addresses {
+		mAddr, mAddrErr := multiaddr.NewMultiaddr(peerAddr)
+		if mAddrErr != nil {
+			cs.logger.Error(fmt.Sprintf("Unable to create multiaddr from value, %v", mAddrErr))
+		}
+
+		peerinfo, _ := peer.AddrInfoFromP2pAddr(mAddr)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := cs.host.Connect(cs.ctx, *peerinfo); err != nil {
+				cs.logger.Error(fmt.Sprintf("Unable to connect to rendezvous node (%s), %v", *peerinfo, err))
+			} else {
+				cs.logger.Info(fmt.Sprintf("Successfully connected to rendezvous node %s", *peerinfo))
+				cs.rendezvousIDs = append(cs.rendezvousIDs, peerinfo.ID)
+			}
+		}()
+	}
+	wg.Wait()
+
+	cs.rendezvousMux.Unlock()
+}
+
 // CreateWorkspace sends a new workspace request to the rendezvous nodes
 func (cs *ClientServer) CreateWorkspace(workspaceRequest types.NewWorkspaceRequest) (*proto.WorkspaceInfo, error) {
 	rendezvousID, findErr := cs.findBestRendezvous()

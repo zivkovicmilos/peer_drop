@@ -27,6 +27,8 @@ const SuggestedFile: FC<ISuggestedFileProps> = (props) => {
     name: string,
     extension: string
   ) => {
+    openSnackbar('Started file download...', 'success');
+
     const downloadFile = async () => {
       return await WorkspacesService.downloadFile({
         workspaceMnemonic: CommonUtils.unformatMnemonic(workspaceMnemonic),

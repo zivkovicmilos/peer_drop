@@ -423,7 +423,11 @@ func DownloadWorkspaceFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unable to download file", http.StatusInternalServerError)
 		return
 	}
-	defer f.Close()
+
+	defer func() {
+		_ = f.Close()
+		_ = os.Remove(downloadInfo.FilePath)
+	}()
 
 	w.Header().Set("Content-Disposition", "attachment; filename="+strconv.Quote(downloadInfo.FileName))
 	w.Header().Set("Content-Type", "application/octet-stream")

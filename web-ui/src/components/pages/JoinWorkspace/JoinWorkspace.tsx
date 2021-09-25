@@ -25,29 +25,9 @@ import JoinWorkspaceModal from '../../molecules/JoinWorkspaceModal/JoinWorkspace
 import JoinWorkspacePasswordModal from '../../molecules/JoinWorkspacePasswordModal/JoinWorkspacePasswordModal';
 import NewWorkspaceInfo from '../../molecules/NewWorkspaceInfo/NewWorkspaceInfo';
 import useSnackbar from '../../molecules/Snackbar/useSnackbar.hook';
-import { IJoinWorkspaceProps, WorkspaceInfo } from './joinWorkspace.types';
+import { IJoinWorkspaceProps } from './joinWorkspace.types';
 
 const JoinWorkspace: FC<IJoinWorkspaceProps> = () => {
-  const blankWorkspaceInfo: WorkspaceInfo = {
-    workspaceName: 'Dummy workspace',
-    workspaceType: ENewWorkspaceType.SEND_ONLY,
-    accessControl: { password: '123' },
-    permissions: {
-      autocloseWorkspace: {
-        active: false
-      },
-
-      enforcePeerLimit: {
-        active: false
-      },
-
-      additionalOwners: {
-        active: false
-      }
-    },
-    accessControlType: ENWAccessControl.PASSWORD
-  };
-
   const { openSnackbar } = useSnackbar();
 
   const connectionFormik = useFormik({
@@ -235,7 +215,7 @@ const JoinWorkspace: FC<IJoinWorkspaceProps> = () => {
             </Box>
           );
         } else {
-          return <Box>Dummy</Box>;
+          return null;
         }
     }
   };
