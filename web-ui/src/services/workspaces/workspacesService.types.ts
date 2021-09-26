@@ -53,6 +53,7 @@ export interface IWorkspaceDetailedResponse {
   workspaceName: string;
   workspaceType: string;
   workspaceFiles: IWorkspaceDetailedFileResponse[];
+  workspaceOwnerKeyIDs: string[];
 }
 
 export interface IWorkspaceDetailedFileResponse {

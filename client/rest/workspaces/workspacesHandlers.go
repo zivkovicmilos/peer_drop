@@ -13,6 +13,7 @@ import (
 
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/gorilla/mux"
+	"github.com/zivkovicmilos/peer_drop/crypto"
 	"github.com/zivkovicmilos/peer_drop/proto"
 	"github.com/zivkovicmilos/peer_drop/rest/types"
 	"github.com/zivkovicmilos/peer_drop/rest/utils"
@@ -208,6 +209,17 @@ func GetWorkspaceFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get the public key IDs
+	workspaceOwnerKeyIDs := make([]string, 0)
+	for _, owner := range workspaceInfo.WorkspaceOwnerPublicKeys {
+		ownerKeyID, keyErr := crypto.GetKeyIDFromPEM(owner, true)
+		if keyErr != nil {
+			http.Error(w, "Unable to parse key", http.StatusInternalServerError)
+			return
+		}
+		workspaceOwnerKeyIDs = append(workspaceOwnerKeyIDs, ownerKeyID)
+	}
+
 	// Grab the file list from the clientServer
 	clientServer := servicehandler.GetServiceHandler().GetClientServer()
 	fileList := clientServer.GetFileList(mnemonic)
@@ -215,10 +227,11 @@ func GetWorkspaceFiles(w http.ResponseWriter, r *http.Request) {
 	formattedList := formatFileList(fileList)
 
 	detailedResponse := &types.WorkspaceDetailedResponse{
-		WorkspaceMnemonic: workspaceInfo.Mnemonic,
-		WorkspaceName:     workspaceInfo.Name,
-		WorkspaceType:     workspaceInfo.WorkspaceType,
-		WorkspaceFiles:    formattedList,
+		WorkspaceMnemonic:    workspaceInfo.Mnemonic,
+		WorkspaceName:        workspaceInfo.Name,
+		WorkspaceType:        workspaceInfo.WorkspaceType,
+		WorkspaceFiles:       formattedList,
+		WorkspaceOwnerKeyIDs: workspaceOwnerKeyIDs,
 	}
 
 	if encodeErr := json.NewEncoder(w).Encode(detailedResponse); encodeErr != nil {

@@ -384,19 +384,19 @@ func (cs *ClientServer) initializeWorkspace(workspaceInfo *proto.WorkspaceInfo) 
 	switch workspaceInfo.WorkspaceType {
 	case config.WORKSPACE_TYPE_SEND_ONLY:
 		if amOwner {
-			// If we are the owner of this workspace, we only listen for messages
-			go cs.startSubscriptionListener(mnemonic)
-		} else {
-			// If we are not the owner of this workspace, we only send messages
-			go cs.startTopicPublisher(mnemonic)
-		}
-	case config.WORKSPACE_TYPE_RECEIVE_ONLY:
-		if amOwner {
 			// If we are the owner of this workspace, we only send messages
 			go cs.startTopicPublisher(mnemonic)
 		} else {
 			// If we are not the owner of this workspace, we only receive messages
 			go cs.startSubscriptionListener(mnemonic)
+		}
+	case config.WORKSPACE_TYPE_RECEIVE_ONLY:
+		if amOwner {
+			// If we are the owner of this workspace, we only receive messages
+			go cs.startSubscriptionListener(mnemonic)
+		} else {
+			// If we are not the owner of this workspace, we only send messages
+			go cs.startTopicPublisher(mnemonic)
 		}
 	default:
 		// Send & Receive

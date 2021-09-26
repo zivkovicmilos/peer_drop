@@ -168,7 +168,8 @@ const useStyles = makeStyles(() => {
       }
     },
     workspaceTitle: {
-      fontWeight: 600
+      fontWeight: 600,
+      textAlign: 'left'
     },
     workspaceInfo: {
       fontWeight: 400,

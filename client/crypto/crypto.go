@@ -229,6 +229,19 @@ func GenerateKeyPair(request types.GenerateKeyPairRequest) (string, error) {
 	return buf.String(), nil
 }
 
+// GetKeyIDFromPEM returns the public key's ID from the given PEM string
+func GetKeyIDFromPEM(publicKey string, long bool) (string, error) {
+	publicKeyPacket, err := ParseRsaPublicKeyFromPemStr(publicKey)
+	if err != nil {
+		return "", err
+	}
+
+	modulus := publicKeyPacket.PublicKey.(*rsa.PublicKey).N.Bytes()
+	keyID := GetKeyID(modulus, long)
+
+	return keyID, nil
+}
+
 // GetKeyID returns the public key's ID
 func GetKeyID(modulus []byte, long bool) string {
 	var size int

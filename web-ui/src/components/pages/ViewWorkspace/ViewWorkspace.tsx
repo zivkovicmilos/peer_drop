@@ -15,9 +15,17 @@ import { makeStyles } from '@material-ui/core/styles';
 import ArrowBackRoundedIcon from '@material-ui/icons/ArrowBackRounded';
 import ExitToAppRoundedIcon from '@material-ui/icons/ExitToAppRounded';
 import MoreVertRoundedIcon from '@material-ui/icons/MoreVertRounded';
-import React, { FC, Fragment, useEffect, useRef, useState } from 'react';
+import React, {
+  FC,
+  Fragment,
+  useContext,
+  useEffect,
+  useRef,
+  useState
+} from 'react';
 import { useHistory, useParams } from 'react-router-dom';
 import { ENewWorkspaceType } from '../../../context/newWorkspaceContext.types';
+import SessionContext from '../../../context/SessionContext';
 import WorkspacesService from '../../../services/workspaces/workspacesService';
 import { IWorkspaceDetailedResponse } from '../../../services/workspaces/workspacesService.types';
 import { ReactComponent as Clipboard } from '../../../shared/assets/icons/content_paste_black_24dp.svg';
@@ -38,12 +46,26 @@ import { IViewWorkspaceProps } from './viewWorkspace.types';
 const ViewWorkspace: FC<IViewWorkspaceProps> = () => {
   const { workspaceMnemonic } = useParams() as { workspaceMnemonic: string };
 
+  const { userIdentity } = useContext(SessionContext);
+
+  const [isOwner, setIsOwner] = useState<boolean>(false);
+
   const [workspaceDetailed, setWorkspaceDetailed] =
     useState<IWorkspaceDetailedResponse>(null);
 
   const { openSnackbar } = useSnackbar();
 
   const history = useHistory();
+
+  const setIfOwner = (publicKeyIDs: string[]) => {
+    for (let i = 0; i < publicKeyIDs.length; i++) {
+      if (publicKeyIDs[i] == userIdentity.publicKeyID) {
+        setIsOwner(true);
+      }
+    }
+
+    setIsOwner(false);
+  };
 
   const fetchWorkspaceDetailed = () => {
     const fetchDetailed = async () => {
@@ -55,6 +77,8 @@ const ViewWorkspace: FC<IViewWorkspaceProps> = () => {
     fetchDetailed()
       .then((response) => {
         setWorkspaceDetailed(response);
+
+        setIfOwner(response.workspaceOwnerKeyIDs);
       })
       .catch((err) => {
         openSnackbar('Unable to fetch workspace files', 'error');
@@ -143,36 +167,70 @@ const ViewWorkspace: FC<IViewWorkspaceProps> = () => {
   const renderWorkspaceActions = () => {
     let workspaceType = convertWorkspaceType(workspaceDetailed.workspaceType);
 
-    if (
-      workspaceType == ENewWorkspaceType.SEND_ONLY ||
-      workspaceType == ENewWorkspaceType.SEND_RECEIVE
-    ) {
-      return (
-        <Fragment>
-          <input
-            ref={imageRef}
-            type="file"
-            style={{ display: 'none' }}
-            accept="*"
-            onChange={handleUpload}
-          />
-          <Button
-            variant={'text'}
-            startIcon={<UploadIcon />}
-            onClick={showOpenFileDialog}
-          >
-            Upload
-          </Button>
-        </Fragment>
-      );
+    if (isOwner) {
+      if (
+        workspaceType == ENewWorkspaceType.SEND_ONLY ||
+        workspaceType == ENewWorkspaceType.SEND_RECEIVE
+      ) {
+        return (
+          <Fragment>
+            <input
+              ref={imageRef}
+              type="file"
+              style={{ display: 'none' }}
+              accept="*"
+              onChange={handleUpload}
+            />
+            <Button
+              variant={'text'}
+              startIcon={<UploadIcon />}
+              onClick={showOpenFileDialog}
+            >
+              Upload
+            </Button>
+          </Fragment>
+        );
+      } else {
+        return (
+          <Tooltip title={'Workspace is receive-only'}>
+            <Button disabled variant={'text'} startIcon={<UploadIcon />}>
+              Upload
+            </Button>
+          </Tooltip>
+        );
+      }
     } else {
-      return (
-        <Tooltip title={'Workspace is receive-only'}>
-          <Button disabled variant={'text'} startIcon={<UploadIcon />}>
-            Upload
-          </Button>
-        </Tooltip>
-      );
+      if (workspaceType == ENewWorkspaceType.SEND_ONLY) {
+        return (
+          <Tooltip title={'Workspace is send-only'}>
+            <Button disabled variant={'text'} startIcon={<UploadIcon />}>
+              Upload
+            </Button>
+          </Tooltip>
+        );
+      } else {
+        return (
+          <Fragment>
+            <input
+              ref={imageRef}
+              type="file"
+              style={{ display: 'none' }}
+              accept="*"
+              onChange={handleUpload}
+            />
+            <Button
+              variant={'text'}
+              startIcon={<UploadIcon />}
+              onClick={showOpenFileDialog}
+              disabled={
+                workspaceType == ENewWorkspaceType.RECEIVE_ONLY && isOwner
+              }
+            >
+              Upload
+            </Button>
+          </Fragment>
+        );
+      }
     }
   };
 

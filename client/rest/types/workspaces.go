@@ -48,6 +48,8 @@ type WorkspaceDetailedResponse struct {
 	WorkspaceType     string `json:"workspaceType"`
 
 	WorkspaceFiles []FileInfo `json:"workspaceFiles"`
+
+	WorkspaceOwnerKeyIDs []string `json:"workspaceOwnerKeyIDs"`
 }
 
 type FileInfo struct {
