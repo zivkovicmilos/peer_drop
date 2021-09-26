@@ -5,7 +5,7 @@ const addRendezvousSchema = yup.object({
     .string()
     .defined('Address is required')
     .test('Address test', 'Invalid address', function (value) {
-      let regex = /\/ip4\/\d+\.\d+\.\d+\.\d\/tcp\/\d+\/p2p\/\w+/gm;
+      let regex = /\/ip4\/\d+\.\d+\.\d+\.\d+\/tcp\/\d+\/p2p\/\w+/gm;
       if (value == null || value == '' || value == undefined) {
         return false;
       }
