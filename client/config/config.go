@@ -44,7 +44,7 @@ var (
 // Default rendezvous nodes that are already up and running
 var (
 	DefaultRendezvousNodes = []string{
-		"/ip4/0.0.0.0/tcp/10002/p2p/QmStEtLymW9HSZ5AX3YWtJQaxMpU2eXaMCLniT4XaEAJht", // TODO set
+		"/ip4/46.101.229.130/tcp/10002/p2p/QmdBhgtDwRVkJJ5DbfVHUm4FuhcmpDQ4Qebx66x48MmYu8", // DigitalOcean rendezvous
 	}
 )
 
