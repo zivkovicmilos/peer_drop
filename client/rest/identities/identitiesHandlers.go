@@ -1,7 +1,6 @@
 package identities
 
 import (
-	"crypto/rsa"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -26,13 +25,13 @@ func CreateIdentity(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Parse the private key
-	privateKey, parseError := crypto.ParsePrivateKeyFromPemStr(identity.PrivateKey)
+	privateKey, parseError := crypto.ParseRSAKey(identity.PrivateKey)
 	if parseError != nil {
 		http.Error(w, "Invalid private key", http.StatusBadRequest)
 		return
 	}
 
-	publicKeyEncoded, encodeErr := crypto.EncodePublicKeyStr(privateKey.PublicKey.PublicKey.(*rsa.PublicKey))
+	publicKeyEncoded, encodeErr := privateKey.GetArmoredPublicKey()
 	if encodeErr != nil {
 		http.Error(w, "Unable to encode public key", http.StatusInternalServerError)
 		return
@@ -45,7 +44,7 @@ func CreateIdentity(w http.ResponseWriter, r *http.Request) {
 	newIdentity.NumWorkspaces = 0
 	newIdentity.PrivateKey = identity.PrivateKey
 	newIdentity.PublicKey = publicKeyEncoded
-	newIdentity.PublicKeyID = privateKey.PublicKey.KeyIdString()
+	newIdentity.PublicKeyID = privateKey.GetHexKeyID()
 	newIdentity.IsPrimary = false
 
 	createError := storage.GetStorageHandler().CreateIdentity(*newIdentity)
@@ -139,20 +138,20 @@ func UpdateIdentity(w http.ResponseWriter, r *http.Request) {
 		// The private key has been updated.
 
 		// Parse the private key
-		privateKey, parseError := crypto.ParsePrivateKeyFromPemStr(updateRequest.PrivateKey)
+		privateKey, parseError := crypto.ParseRSAKey(updateRequest.PrivateKey)
 		if parseError != nil {
 			http.Error(w, "Invalid private key", http.StatusBadRequest)
 			return
 		}
 
-		publicKeyEncoded, encodeErr := crypto.EncodePublicKeyStr(privateKey.PublicKey.PublicKey.(*rsa.PublicKey))
+		publicKeyEncoded, encodeErr := privateKey.GetArmoredPublicKey()
 		if encodeErr != nil {
 			http.Error(w, "Unable to encode public key", http.StatusInternalServerError)
 			return
 		}
 
 		updatedIdentity.PublicKey = publicKeyEncoded
-		updatedIdentity.PublicKeyID = privateKey.PublicKey.KeyIdString()
+		updatedIdentity.PublicKeyID = privateKey.GetHexKeyID()
 	} else {
 		// No private key update, use the old one
 		updatedIdentity.PublicKey = identity.PublicKey

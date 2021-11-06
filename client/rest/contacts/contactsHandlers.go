@@ -81,13 +81,13 @@ func UpdateContact(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Parse the public key
-	publicKey, parseError := crypto.ParseRsaPublicKeyFromPemStr(updatedContact.PublicKey)
+	publicKey, parseError := crypto.ParseRSAKey(updatedContact.PublicKey)
 	if parseError != nil {
 		http.Error(w, "Invalid public key", http.StatusBadRequest)
 		return
 	}
 
-	email, emailError := crypto.GetEmailFromPublicKey(updatedContact.PublicKey)
+	email, emailError := crypto.GetEmailFromIdentityName(publicKey.GetEntity().PrimaryIdentity().Name)
 	if emailError != nil {
 		http.Error(w, "Invalid public key", http.StatusBadRequest)
 		return
@@ -96,7 +96,7 @@ func UpdateContact(w http.ResponseWriter, r *http.Request) {
 	// Copy the existing fields and populate new ones
 	// Name and publicKey are already added
 	updatedContact.ID = contact.ID
-	updatedContact.PublicKeyID = publicKey.KeyIdString()
+	updatedContact.PublicKeyID = publicKey.GetHexKeyID()
 	updatedContact.Email = email
 	updatedContact.DateAdded = contact.DateAdded
 
@@ -123,14 +123,14 @@ func CreateContact(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Parse the public key
-	publicKey, parseError := crypto.ParseRsaPublicKeyFromPemStr(contact.PublicKey)
+	publicKey, parseError := crypto.ParseRSAKey(contact.PublicKey)
 	if parseError != nil {
 		http.Error(w, "Invalid public key", http.StatusBadRequest)
 		return
 	}
 
 	var email string
-	retrievedEmail, emailError := crypto.GetEmailFromPublicKey(contact.PublicKey)
+	retrievedEmail, emailError := crypto.GetEmailFromIdentityName(publicKey.GetEntity().PrimaryIdentity().Name)
 	if emailError != nil {
 		email = "unknown"
 	} else {
@@ -138,7 +138,7 @@ func CreateContact(w http.ResponseWriter, r *http.Request) {
 	}
 
 	contact.ID = uuid.New().String()
-	contact.PublicKeyID = publicKey.KeyIdString()
+	contact.PublicKeyID = publicKey.GetHexKeyID()
 	contact.Email = email
 	contact.DateAdded = time.Now().Format(utils.DateFormat)
 

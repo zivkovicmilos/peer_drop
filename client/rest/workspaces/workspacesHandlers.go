@@ -212,7 +212,7 @@ func GetWorkspaceFiles(w http.ResponseWriter, r *http.Request) {
 	// Get the public key IDs
 	workspaceOwnerKeyIDs := make([]string, 0)
 	for _, owner := range workspaceInfo.WorkspaceOwnerPublicKeys {
-		ownerKeyID, keyErr := crypto.GetKeyIDFromPEM(owner, true)
+		ownerKeyID, keyErr := crypto.GetKeyIDFromPEM(owner)
 		if keyErr != nil {
 			http.Error(w, "Unable to parse key", http.StatusInternalServerError)
 			return

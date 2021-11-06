@@ -4,11 +4,11 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"crypto/rsa"
-	"crypto/sha256"
+	"fmt"
 	"io"
 	"time"
 
+	libCrypto "github.com/ProtonMail/gopenpgp/v2/crypto"
 	"github.com/google/uuid"
 	"github.com/zivkovicmilos/peer_drop/crypto"
 	"github.com/zivkovicmilos/peer_drop/proto"
@@ -46,29 +46,22 @@ func ConstructPublicKeyChallenge(unencryptedData []byte, publicKeyPEM string) (*
 	// Set the timestamp to prevent replay attacks
 	publicKeyChallenge.Timestamp = time.Now().Unix()
 
-	// Convert the public key PEM block to an rsa object
-	publicKey, parseErr := crypto.ParseRsaPublicKeyFromPemStr(publicKeyPEM)
+	// Convert the public key PEM block to a key object
+	publicKey, parseErr := crypto.ParseRSAKey(publicKeyPEM)
 	if parseErr != nil {
 		return nil, parseErr
 	}
 
-	rsaPublicKey := publicKey.PublicKey.(*rsa.PublicKey)
-
-	// Encrypt the small message using RSA
-	// Another route would also be to leverage RSA signing,
-	// But since this data is very small,
-	// it's okay to use RSA for encryption
-	encryptedData, err := rsa.EncryptOAEP(
-		sha256.New(),
-		rand.Reader,
-		rsaPublicKey,
-		unencryptedData,
-		nil)
+	publicKeyRing, err := libCrypto.NewKeyRing(publicKey)
+	encryptedData, err := publicKeyRing.Encrypt(libCrypto.NewPlainMessage(unencryptedData), nil)
+	if err != nil {
+		return nil, err
+	}
 	if err != nil {
 		panic(err)
 	}
 
-	publicKeyChallenge.EncryptedValue = encryptedData
+	publicKeyChallenge.EncryptedValue = encryptedData.GetBinary()
 
 	return publicKeyChallenge, nil
 }
@@ -121,25 +114,27 @@ func SolvePublicKeyChallenge(
 	solution := &proto.ChallengeSolution{}
 	solution.ChallengeId = challenge.ChallengeId
 
-	privateKey, parseErr := crypto.ParsePrivateKeyFromPemStr(privateKeyPEM)
+	privateKey, parseErr := crypto.ParseRSAKey(privateKeyPEM)
 	if parseErr != nil {
 		return nil, parseErr
 	}
 
-	rsaPrivateKey := privateKey.PrivateKey.(*rsa.PrivateKey)
+	privateKeyRing, err := libCrypto.NewKeyRing(privateKey)
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse RSA key ring, %v", err)
+	}
 
-	decryptedData, err := rsa.DecryptOAEP(
-		sha256.New(),
-		rand.Reader,
-		rsaPrivateKey,
-		challenge.EncryptedValue,
+	encryptedData := libCrypto.NewPGPMessage(challenge.EncryptedValue)
+	decryptedData, err := privateKeyRing.Decrypt(
+		encryptedData,
 		nil,
+		0,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	solution.DecryptedValue = decryptedData
+	solution.DecryptedValue = decryptedData.GetBinary()
 
 	return solution, nil
 }
