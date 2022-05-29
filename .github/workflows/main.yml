@@ -61,9 +61,8 @@ jobs:
           submodules: recursive
 
       - name: Run testing suite
+        working-directory: ./client
         run: go test -timeout 28m ./...
-        with:
-          working-directory: ./client
 
       - name: Upload to Codecov
         uses: codecov/codecov-action@v3
