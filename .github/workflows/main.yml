@@ -18,9 +18,9 @@ jobs:
 
       - name: Run linter
         uses: golangci/golangci-lint-action@v3
-        working-directory: ./client
         with:
           version: latest
+          working-directory: ./client
           args:
             --timeout=3m
             -E whitespace
@@ -61,8 +61,9 @@ jobs:
           submodules: recursive
 
       - name: Run testing suite
-        working-directory: ./client
         run: go test -timeout 28m ./...
+        with:
+          working-directory: ./client
 
       - name: Upload to Codecov
         uses: codecov/codecov-action@v3
